@@ -1,0 +1,85 @@
+.app-shell { max-width: 1220px; margin: 0 auto; padding: 0 36px; }
+.site-header { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 30px 0; border-bottom: 1px solid var(--line); }
+.brand { display: inline-flex; align-items: center; gap: 13px; color: var(--text); text-decoration: none; font-weight: bold; }
+.brand small { display: block; color: var(--muted); font-size: .74rem; font-weight: normal; margin-top: 3px; letter-spacing: .07em; }
+.brand-mark { display: grid; place-items: center; width: 42px; height: 48px; border: 1px solid var(--gold); border-radius: 20px 20px 3px 3px; color: var(--gold); font-family: Georgia, serif; }
+.account, .actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.account { font-size: .85rem; justify-content: flex-end; overflow-wrap: anywhere; }
+.account > span { max-width: 280px; }
+main { padding: 50px 0 64px; min-height: calc(100vh - 245px); }
+.welcome-grid { display: grid; grid-template-columns: 1.15fr 1fr; gap: clamp(28px, 6vw, 90px); align-items: start; }
+.welcome { padding-top: 24px; }
+h1 { font-size: clamp(2.35rem, 4.5vw, 3.65rem); line-height: 1.12; font-weight: normal; margin: 16px 0 24px; }
+.lede { font-size: 1.13rem; max-width: 39ch; color: var(--muted); }
+.eyebrow { font-size: .72rem; letter-spacing: .16em; text-transform: uppercase; color: var(--gold); font-weight: bold; }
+.principles { margin-top: 40px; }
+.principles > div { display: flex; gap: 20px; padding: 17px 0; border-top: 1px solid var(--line); }
+.principles span { color: var(--gold); font-family: Georgia, serif; padding-top: 1px; }
+.principles p { margin: 0; color: var(--muted); font-size: .92rem; }
+.principles strong { color: var(--text); }
+.connection-panel { padding: 32px; background: linear-gradient(150deg, #243143, #1b2534); border: 1px solid #3b4758; border-radius: 16px; box-shadow: 0 24px 60px #0003; }
+.connection-panel h2 { margin: 23px 0 14px; font-size: 2rem; font-weight: normal; }
+.connection-panel p { color: var(--muted); }
+.connection-panel .primary { width: 100%; margin-top: 14px; }
+.permission-note { font-size: .81rem; }
+hr { border: 0; border-top: 1px solid var(--line); margin: 25px 0; }
+.tag { display: inline-block; border: 1px solid #5d5334; border-radius: 30px; padding: 4px 11px; color: #f4d979; background: #eab3080b; font-size: .7rem; white-space: nowrap; }
+.group-heading { display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+.group-heading h1 { font-size: 2.5rem; overflow-wrap: anywhere; }
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); border-block: 1px solid var(--line); margin: 22px 0; }
+.stats > div { padding: 20px; display: flex; align-items: center; gap: 16px; }
+.stats > div + div { border-left: 1px solid var(--line); }
+.stats strong { color: var(--gold); font-family: Georgia, serif; font-size: 2.2rem; font-weight: normal; }
+.stats span { color: var(--muted); font-size: .86rem; }
+.notice { border-left: 3px solid var(--gold); background: #eab3080b; padding: 18px 22px; font-size: .9rem; margin-bottom: 32px; }
+.notice a { display: block; margin-top: 9px; }
+.board-tools { display: flex; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; gap: 24px; }
+.tabs { display: flex; gap: 5px; }
+.tabs button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: none; padding: 10px 12px; }
+.tabs button[aria-pressed=true] { color: var(--gold); border-color: var(--gold); }
+.tabs span { margin-left: 6px; font-size: .8rem; }
+.search { display: grid; gap: 6px; font-size: .8rem; color: var(--muted); width: 290px; max-width: 100%; }
+input { border: 1px solid var(--line); background: #182231; color: var(--text); font: inherit; border-radius: 8px; padding: 11px 12px; width: 100%; }
+.records { display: grid; gap: 14px; }
+.prayer-card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 24px; min-width: 0; overflow-wrap: anywhere; }
+.card-meta { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; font-size: .75rem; color: var(--muted); }
+.private { color: #b3d2e6; border-color: #425a6b; background: #71adce0b; }
+.prayer-card h3 { font-family: Georgia, serif; font-size: 1.4rem; font-weight: normal; margin: 16px 0 10px; }
+.description { white-space: pre-wrap; width: 100%; }
+.details { display: flex; flex-wrap: wrap; gap: 10px 24px; color: var(--muted); font-size: .85rem; }
+.contact { border-top: 1px solid var(--line); padding-top: 13px; margin-bottom: 0; color: var(--muted); font-size: .84rem; }
+.preview-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 15px; margin-top: 24px; }
+.preview-actions p { color: var(--muted); font-size: .84rem; }
+.empty { padding: 40px 24px; text-align: center; border: 1px dashed var(--line); border-radius: 12px; color: var(--muted); }
+.error { background: #51272f; border: 1px solid #945263; color: #ffe4e7; padding: 16px 20px; border-radius: 10px; margin-bottom: 24px; }
+.progress { display: flex; align-items: center; flex-wrap: wrap; gap: 16px; margin-bottom: 24px; color: var(--gold); }
+footer { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 14px; padding: 25px 0 30px; border-top: 1px solid var(--line); font-size: .76rem; color: var(--muted); }
+footer p { margin: 0; }
+footer nav { display: flex; flex-wrap: wrap; gap: 18px; }
+footer a { color: var(--muted); }
+@media (max-width: 780px) {
+  .app-shell { padding: 0 20px; }
+  main { padding-top: 28px; }
+  .welcome-grid { grid-template-columns: 1fr; gap: 30px; }
+  .welcome { padding-top: 5px; }
+  .welcome h1 br { display: none; }
+  .principles { margin-top: 25px; }
+  .connection-panel { padding: 25px; }
+  .group-heading { align-items: flex-start; flex-direction: column; gap: 0; }
+  .stats > div { flex-direction: column; align-items: flex-start; gap: 3px; padding: 12px; }
+  .board-tools { gap: 18px; }
+  .search { width: 100%; }
+}
+@media (max-width: 460px) {
+  .site-header { flex-wrap: wrap; padding: 20px 0; gap: 16px; }
+  .account { width: 100%; justify-content: space-between; }
+  .account > span { max-width: 65%; }
+  .prayer-card { padding: 18px; }
+  .stats { margin-top: 28px; }
+  .stats span { font-size: .76rem; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .welcome, .connection-panel { animation: arrive .45s ease-out both; }
+  .connection-panel { animation-delay: .08s; }
+  @keyframes arrive { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+}

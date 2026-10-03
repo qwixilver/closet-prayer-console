@@ -1,0 +1,27 @@
+:root { color-scheme: dark; --bg: #111827; --panel: #1f2937; --text: #f3f4f6; --muted: #b6bfcc; --gold: #edc545; --line: #364152; }
+* { box-sizing: border-box; }
+body { margin: 0; color: var(--text); background: radial-gradient(ellipse at 80% 0%, #24304288, transparent 55%), var(--bg); font: 16px/1.6 'Trebuchet MS', sans-serif; }
+h1, h2 { font-family: Georgia, 'Times New Roman', serif; line-height: 1.2; }
+h3 { line-height: 1.4; font-size: 1rem; }
+a { color: var(--gold); text-underline-offset: 4px; }
+a:hover { color: #fff1b2; }
+:focus-visible { outline: 3px solid #f8de84; outline-offset: 4px; }
+button, .button { display: inline-block; font: inherit; font-size: .87rem; font-weight: bold; text-align: center; padding: 11px 16px; border: 1px solid #536073; border-radius: 8px; background: #273447; color: var(--text); cursor: pointer; text-decoration: none; }
+button:hover:not(:disabled), .button:hover { background: #344258; }
+button:disabled { cursor: not-allowed; opacity: .55; }
+.primary { color: #201c0e; background: var(--gold); border-color: var(--gold); }
+.primary:hover:not(:disabled) { color: #201c0e; background: #f6d869; }
+.muted { color: var(--muted); }
+.small { font-size: .85rem; }
+.document { max-width: 850px; margin: 0 auto; padding: 35px 24px 60px; overflow-wrap: anywhere; }
+.document header { border-bottom: 1px solid var(--line); margin-bottom: 32px; padding-bottom: 22px; }
+.document h1 { font-size: clamp(2rem, 5vw, 3rem); font-weight: normal; }
+.document h2 { font-size: 1.65rem; font-weight: normal; margin-top: 42px; }
+.document li { margin: 12px 0; }
+.document .callout { border-left: 3px solid var(--gold); background: #eab3080b; padding: 16px 20px; }
+.document code { background: #243042; color: #f5df91; border-radius: 3px; padding: 2px 5px; font-size: .86em; overflow-wrap: anywhere; }
+.document pre { background: #1a2433; padding: 20px; border: 1px solid var(--line); border-radius: 10px; white-space: pre-wrap; }
+.document pre code { background: none; padding: 0; }
+.document table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+.document th, .document td { text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); padding: 12px 8px; }
+.document footer { margin-top: 45px; border-top: 1px solid var(--line); padding-top: 20px; color: var(--muted); font-size: .85rem; }
