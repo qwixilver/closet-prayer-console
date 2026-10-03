@@ -104,6 +104,8 @@ try {
   const mockServer = runVite(['preview', '--outDir', mockDist, '--host', '127.0.0.1', '--port', '4176', '--strictPort']);
   server.done.catch(() => {}); mockServer.done.catch(() => {});
   await ready('http://localhost:4175/'); await ready('http://localhost:4176/');
+  assert.match(await (await fetch('http://localhost:4175/LICENSE.txt')).text(), /GNU GENERAL PUBLIC LICENSE/);
+  assert.match(await (await fetch('http://localhost:4175/THIRD_PARTY_NOTICES.txt')).text(), /Meta Platforms/);
   browser = await chromium.launch({ channel: 'msedge', headless: true });
 
   const setupPage = await browser.newPage({ viewport: { width: 1280, height: 900 } });

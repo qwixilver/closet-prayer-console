@@ -186,7 +186,7 @@ function App() {
         </section>
       </div>}
     </main>
-    <footer><p>No central prayer database. No console data saved for offline use.</p><nav aria-label="Resources"><a href="./setup.html">Google setup</a><a href="./privacy.html">Privacy</a><a href="https://github.com/qwixilver/closet-prayer-console">Source code</a><a href="https://closetprayer.com/">Prayer journal</a></nav></footer>
+    <footer><p>No central prayer database. No console data saved for offline use.</p><nav aria-label="Resources"><a href="./setup.html">Google setup</a><a href="./privacy.html">Privacy</a><a href="https://github.com/qwixilver/closet-prayer-console">Source code</a><a href="./LICENSE.txt">GPL-3.0</a><a href="./THIRD_PARTY_NOTICES.txt">Third-party notices</a><a href="https://closetprayer.com/">Prayer journal</a></nav></footer>
   </div>;
 }
 
