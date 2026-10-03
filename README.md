@@ -76,6 +76,15 @@ The `Deploy console` workflow tests and builds `main`, then publishes to GitHub
 Pages. Enable Pages with GitHub Actions as the source. Set the custom domain in
 Pages **before** adding its DNS record. See the setup guide for the exact record.
 
-Do not commit secrets or prayer data. This repository is public. A formal license
-has not yet been selected; public source availability alone does not grant an
-open-source license.
+Do not commit secrets or prayer data. This repository is public.
+
+## License
+
+Copyright (C) 2026 Closet Prayer Console contributors.
+
+This project's original code and documentation are licensed under the
+[GNU General Public License, version 3 only](LICENSE) (`GPL-3.0-only`). You may
+redistribute and modify them under that license. They are provided without any
+warranty, including implied warranties of merchantability or fitness for a
+particular purpose. See the full license for its terms. Third-party dependencies
+retain their own licenses.

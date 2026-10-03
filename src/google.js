@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 export const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
 export const SCOPES = ['openid', 'https://www.googleapis.com/auth/userinfo.email',
   'https://www.googleapis.com/auth/userinfo.profile', DRIVE_SCOPE];

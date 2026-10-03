@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import React, { StrictMode, useDeferredValue, useEffect, useEffectEvent, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { loadGoogle, pickSpreadsheet, readConfig, requestGoogleSession } from './google.js';

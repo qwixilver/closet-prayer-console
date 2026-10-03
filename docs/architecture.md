@@ -47,7 +47,7 @@ Alternative adapters can follow later without centralizing church prayer data.
 
 ## Release gates
 
-Google project values, consent/branding review, a license decision, DNS/HTTPS,
+Google project values, consent/branding review, DNS/HTTPS,
 and the real-account checklist in `public/setup.html` remain operator steps.
 Unit and mocked-browser tests verify local behavior, not Google's live consent,
 Picker referrer restrictions, mobile popup behavior, or Workspace policy choices.
