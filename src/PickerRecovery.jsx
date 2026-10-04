@@ -27,6 +27,7 @@ export function PickerRecovery({ onClose }) {
     <p id="picker-recovery-description">Google has not returned a selection. If you already confirmed one and the picker is stuck, close it here to see the connection report. No spreadsheet data has been read.</p>
     <div className="actions"><button className="primary" autoFocus onClick={onClose}>Close picker and show diagnostics</button>
       <button onClick={keepChoosing}>Keep choosing</button></div>
+    <p className="small muted">Using Brave? Cookie blocking can stall Google's picker. Keep Shields on; see <a href="./setup.html#brave-cookies" target="_blank" rel="noopener noreferrer">Brave cookie help</a> for a site-only exception and its privacy tradeoff.</p>
     <p className="small muted">If you keep choosing, this help will return in 45 seconds unless Google responds.</p>
   </dialog>, document.body);
 }

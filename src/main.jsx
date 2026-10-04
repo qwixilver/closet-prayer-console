@@ -208,6 +208,7 @@ function App() {
             : <a className="button primary" href="./setup.html">Set up the Google connection</a>}
           <p className="permission-note">Google permission covers files you select, not your entire Drive. That permission includes editing; this preview only reads data.</p>
           <p className="permission-note">Confirm the spreadsheet with the picker's Select or Open button. This preview keeps your sign-in and chosen group only until you leave or reload the page.</p>
+          {config.ready && <p className="permission-note">Google picker stuck in Brave? <a href="./setup.html#brave-cookies" target="_blank" rel="noopener noreferrer">Browser cookie help</a> explains a site-only workaround without turning Shields off.</p>}
           <hr /><h3>What works in this preview?</h3><p>Connect an account, select a group, and read its submissions and prayers. Approvals and editing still use the spreadsheet's Closet Prayer menu.</p>
           <a href={groupGuide}>Need to create a church group?</a>
         </section>
@@ -217,7 +218,7 @@ function App() {
         <summary>Connection diagnostics</summary>
         <p role="status">{CONNECTION_STEPS[connectionSteps.at(-1).code]}</p>
         <p className="small muted">If selection stalls, a Closet Prayer recovery prompt appears above Google's picker after 45 seconds. Choose Close picker and show diagnostics, then copy this report before refreshing. It contains no keys, tokens, email addresses, file names, file IDs, or prayer text.</p>
-        {connectionSteps.some(step => step.code === 'picker-waiting') && !connectionSteps.some(step => step.code === 'picker-selection-received') && <p className="small muted">No confirmed selection was received. Try the console directly in another browser to compare. Browser privacy settings or extensions are possible causes, not a confirmed diagnosis. See <a href="./setup.html#picker-stalled" target="_blank" rel="noopener noreferrer">picker troubleshooting</a>. Keep your spreadsheet private and API key restricted.</p>}
+        {connectionSteps.some(step => step.code === 'picker-waiting') && !connectionSteps.some(step => step.code === 'picker-selection-received') && <p className="small muted">No confirmed selection was received. Cookie blocking can cause this in Brave; see <a href="./setup.html#brave-cookies" target="_blank" rel="noopener noreferrer">Brave cookie help</a> before changing settings. The console cannot detect your cookie settings, and a missing callback alone does not identify the cause. For other cases, see <a href="./setup.html#picker-stalled" target="_blank" rel="noopener noreferrer">picker troubleshooting</a>. Keep your spreadsheet private and API key restricted.</p>}
         <textarea ref={diagnosticsReport} aria-label="Connection diagnostics report" readOnly rows={8} value={formatConnectionSteps(connectionSteps)} onFocus={event => event.target.select()} />
       </details>}
     </main>

@@ -40,6 +40,13 @@ Use `.env.local` locally or GitHub Actions repository **variables** when deployi
 The browser key must have website and API restrictions. No client secret is used.
 Without valid configuration, the site shows setup instructions and disables login.
 
+Brave cookie blocking can stall Google Picker before any selection callback.
+Live testing confirmed that a site-only `Allow all cookies` exception resolved
+this with Shields otherwise enabled. The connection panel and recovery dialog
+link to [the cookie compatibility guide](public/setup.html#brave-cookies), which
+explains the third-party cookie tradeoff without recommending global exceptions.
+Diagnostics do not automatically identify cookie blocking or inspect settings.
+
 ## Development
 
 Use Node 22.12+ (Node 22 LTS is used in CI):

@@ -267,6 +267,15 @@ try {
   await stalled.page.getByRole('button', { name: 'Cancel test picker' }).click();
   await stalled.page.clock.fastForward(46000);
   await stalled.page.getByRole('dialog', { name: 'Still choosing a spreadsheet?' }).waitFor();
+  const helpTabPromise = stalled.context.waitForEvent('page');
+  await stalled.page.getByRole('dialog', { name: 'Still choosing a spreadsheet?' }).getByRole('link', { name: 'Brave cookie help' }).click();
+  const helpTab = await helpTabPromise;
+  await helpTab.getByRole('heading', { name: 'Brave: picker stalls with cookies blocked' }).waitFor();
+  assert.match(helpTab.url(), /\/setup\.html#brave-cookies$/);
+  await helpTab.setViewportSize({ width: 360, height: 800 });
+  await noOverflow(helpTab);
+  await helpTab.close();
+  await stalled.page.bringToFront();
   await noOverflow(stalled.page);
   await stalled.page.screenshot({ path: resolve(output, 'picker-recovery-mobile.png'), fullPage: true, animations: 'disabled' });
   await stalled.page.getByRole('button', { name: 'Keep choosing', exact: true }).click();

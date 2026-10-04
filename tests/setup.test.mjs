@@ -25,3 +25,23 @@ test('Picker setup retains restrictions and includes both required APIs', () => 
 test('authorization instructions link directly to the Google Auth Platform', () => {
   assert.match(guide, /href="https:\/\/console.cloud.google.com\/auth\/branding"/);
 });
+
+test('Brave workaround keeps Shields enabled and explains the site-only cookie tradeoff', () => {
+  const cookieSection = guide.split('<h3 id="brave-cookies">')[1]?.split('<footer>')[0];
+  assert.ok(cookieSection, 'Brave cookie help anchor is missing');
+  assert.match(cookieSection, /Keep <strong>Shields on<\/strong>/);
+  assert.match(cookieSection, /change only the cookie setting/);
+  assert.match(cookieSection, /Allow all cookies/);
+  assert.match(cookieSection, /do not change global defaults/);
+  assert.match(cookieSection, /permits third-party cookies/);
+  assert.match(cookieSection, /restore your previous cookie setting/);
+  assert.match(cookieSection, /cannot detect your cookie settings/);
+  assert.match(cookieSection, /Do not make the sheet public or loosen API-key restrictions/);
+});
+
+test('connection, recovery, diagnostics, and privacy notice link to the same cookie help', async () => {
+  for (const path of ['../src/main.jsx', '../src/PickerRecovery.jsx', '../public/privacy.html']) {
+    const source = await readFile(new URL(path, import.meta.url), 'utf8');
+    assert.match(source, /href="\.\/setup\.html#brave-cookies"/);
+  }
+});
