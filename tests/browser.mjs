@@ -59,10 +59,36 @@ async function mockContext(options = {}) {
           addView() { return this; } setTitle() { return this; } setOAuthToken() { return this; }
           setDeveloperKey() { return this; } setAppId() { return this; } setOrigin() { return this; }
           setCallback(callback) { this.callback = callback; return this; }
-          build() { return { dispose() {}, setVisible: () => setTimeout(() => this.callback({ action: 'picked', docs: [{ id: '${fileId}' }] }), 0) }; }
+          build() {
+            let dialog;
+            return {
+              dispose() {
+                if (${Boolean(options.disposeThrows)}) throw new Error('PRIVATE SDK ERROR');
+                dialog?.remove();
+              },
+              setVisible: visible => {
+                if (!visible) { dialog?.remove(); return; }
+                dialog = document.createElement('dialog');
+                dialog.setAttribute('aria-label', 'Test Google Picker');
+                const select = document.createElement('button');
+                select.textContent = 'Confirm test spreadsheet';
+                select.onclick = () => {
+                  if (!${Boolean(options.silentSelection)}) this.callback({ action: 'picked', docs: [{ id: '${fileId}' }] });
+                };
+                const cancel = document.createElement('button');
+                cancel.textContent = 'Cancel test picker';
+                cancel.onclick = () => this.callback({ action: 'cancel' });
+                dialog.append(select, cancel);
+                document.body.append(dialog);
+                dialog.showModal();
+                setTimeout(() => this.callback({ action: 'loaded' }), 0);
+              },
+            };
+          }
         }
         window.google.picker = { DocsView: View, PickerBuilder: Builder, ViewId: { SPREADSHEETS: 'spreadsheets' },
-          DocsViewMode: { LIST: 'list' }, Action: { PICKED: 'picked', CANCEL: 'cancel', ERROR: 'error' } };
+          DocsViewMode: { LIST: 'list' }, Action: { PICKED: 'picked', CANCEL: 'cancel', ERROR: 'error' },
+          Response: { ACTION: 'action', DOCUMENTS: 'docs' }, Document: { ID: 'id' } };
         config.callback();
       } };`;
       return route.fulfill({ contentType: 'application/javascript', body: script });
@@ -92,6 +118,9 @@ async function mockContext(options = {}) {
 async function connectAndChoose(page) {
   await page.getByRole('button', { name: 'Connect Google account' }).click();
   await page.getByRole('button', { name: 'Choose a spreadsheet' }).click();
+  await page.getByRole('dialog', { name: 'Test Google Picker' }).waitFor();
+  assert.equal(await page.getByRole('heading', { name: 'Example Church Test Group' }).count(), 0);
+  await page.getByRole('button', { name: 'Confirm test spreadsheet' }).click();
 }
 
 try {
@@ -131,6 +160,7 @@ try {
   const { page, context, state, errors } = await mockContext();
   await connectAndChoose(page);
   await page.getByRole('heading', { name: 'Example Church Test Group' }).waitFor();
+  assert.equal(await page.getByRole('dialog', { name: 'Test Google Picker' }).count(), 0);
   assert.ok(await page.getByText('Administrator-only contact: private-test@example.invalid').isVisible());
   assert.equal(await page.getByRole('button', { name: 'Approve submissions' }).isDisabled(), true);
   await page.getByRole('button', { name: 'Prayers 1' }).click();
@@ -155,9 +185,11 @@ try {
   assert.equal(await page.getByText('A sample prayer for testing').count(), 0);
   state.denyRefresh = false; state.viewer = true;
   await page.getByRole('button', { name: 'Choose a spreadsheet' }).click();
+  await page.getByRole('button', { name: 'Confirm test spreadsheet' }).click();
   await page.getByRole('alert').filter({ hasText: 'Editor permission' }).waitFor();
   state.viewer = false; state.delayValues = true;
   await page.getByRole('button', { name: 'Choose a spreadsheet' }).click();
+  await page.getByRole('button', { name: 'Confirm test spreadsheet' }).click();
   for (let n = 0; !state.pending && n < 100; n++) await delay(20);
   assert.ok(state.pending, 'Expected a delayed response');
   await page.getByRole('button', { name: 'Sign out', exact: true }).click();
@@ -187,6 +219,37 @@ try {
   assert.equal(await expiry.page.getByText('admin@example.invalid').count(), 0);
   await expiry.context.close();
   console.log('PASS: session expiry clears profile and private records');
+
+  const cleanup = await mockContext({ disposeThrows: true });
+  await connectAndChoose(cleanup.page);
+  await cleanup.page.getByRole('heading', { name: 'Example Church Test Group' }).waitFor();
+  assert.equal(await cleanup.page.getByRole('dialog', { name: 'Test Google Picker' }).count(), 0);
+  await cleanup.page.getByText('Connection diagnostics', { exact: true }).click();
+  const cleanupReport = await cleanup.page.getByRole('textbox', { name: 'Connection diagnostics report' }).inputValue();
+  assert.match(cleanupReport, /picker-selection-received/);
+  assert.match(cleanupReport, /picker-cleanup-warning/);
+  assert.match(cleanupReport, /group-loaded/);
+  assert.doesNotMatch(cleanupReport, /PRIVATE|example.invalid|test-only-token|test_spreadsheet/);
+  assert.deepEqual(cleanup.errors, []);
+  await cleanup.context.close();
+  console.log('PASS: cleanup failure does not block group loading; diagnostic report contains no private data');
+
+  const silent = await mockContext({ silentSelection: true });
+  await silent.page.clock.install();
+  await connectAndChoose(silent.page);
+  await silent.page.clock.fastForward(46000);
+  assert.equal(silent.state.apiCalls.length, 1, 'No file read before Google confirms selection');
+  await silent.page.getByRole('button', { name: 'Cancel test picker' }).click();
+  await silent.page.getByRole('dialog', { name: 'Test Google Picker' }).waitFor({ state: 'hidden' });
+  await silent.page.getByText('Connection diagnostics', { exact: true }).click();
+  const silentReport = await silent.page.getByRole('textbox', { name: 'Connection diagnostics report' }).inputValue();
+  assert.match(silentReport, /picker-waiting/);
+  assert.match(silentReport, /picker-cancelled/);
+  assert.doesNotMatch(silentReport, /picker-selection-received|group-reading|group-loaded/);
+  assert.equal(await silent.page.getByRole('button', { name: 'Choose a spreadsheet' }).isEnabled(), true);
+  assert.deepEqual(silent.errors, []);
+  await silent.context.close();
+  console.log('PASS: missing selection callback is diagnosable and cancellable without reading files');
 } finally {
   await browser?.close();
   for (const child of children) if (child.exitCode === null) child.kill();

@@ -73,37 +73,80 @@ export function requestGoogleSession(config) {
   });
 }
 
-export function pickSpreadsheet(config, token, signal) {
+export function pickSpreadsheet(config, token, signal, onStep = () => {}) {
   return new Promise((resolve, reject) => {
     if (signal.aborted) { reject(new DOMException('Cancelled', 'AbortError')); return; }
     const google = window.google;
     let picker;
+    let settled = false;
+    let waitingTimer;
+    function step(code) {
+      // Only fixed step names leave this adapter, never Google's response data.
+      try { onStep(code); } catch { /* Diagnostics must not interrupt selection. */ }
+    }
     function finish(id, error) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(waitingTimer);
       signal.removeEventListener('abort', abort);
-      picker?.dispose();
+      try { picker?.setVisible(false); } catch { step('picker-cleanup-warning'); }
+      // Let Google's callback stack unwind before disposing its dialog. Cleanup
+      // must never prevent a valid selection, cancellation, or error from settling.
+      queueMicrotask(() => {
+        try { picker?.dispose(); } catch { step('picker-cleanup-warning'); }
+      });
       if (error) reject(error); else resolve(id);
     }
-    function abort() { finish(null, new DOMException('Cancelled', 'AbortError')); }
-    const view = new google.picker.DocsView(google.picker.ViewId.SPREADSHEETS)
-      .setMode(google.picker.DocsViewMode.LIST)
-      .setMimeTypes('application/vnd.google-apps.spreadsheet');
-    picker = new google.picker.PickerBuilder()
-      .addView(view)
-      .setTitle('Choose a church-owned prayer group spreadsheet')
-      .setOAuthToken(token)
-      .setDeveloperKey(config.apiKey)
-      .setAppId(config.projectNumber)
-      .setOrigin(window.location.origin)
-      .setCallback(data => {
-        if (data.action === google.picker.Action.PICKED) {
-          const id = data.docs?.[0]?.id;
-          if (!/^[\w-]{16,200}$/.test(id || '')) finish(null, new Error('Google did not return a valid spreadsheet.'));
-          else finish(id);
-        } else if (data.action === google.picker.Action.CANCEL) finish(null);
-        else if (data.action === google.picker.Action.ERROR) finish(null, new Error('Google Picker could not open this file. Check the API key and project setup.'));
-      })
-      .build();
-    signal.addEventListener('abort', abort, { once: true });
-    picker.setVisible(true);
+    function abort() {
+      step('picker-interrupted');
+      finish(null, new DOMException('Cancelled', 'AbortError'));
+    }
+    function receive(data) {
+      if (settled) return;
+      try {
+        const action = data?.[google.picker.Response.ACTION];
+        if (action === google.picker.Action.PICKED) {
+          step('picker-selection-received');
+          const docs = data[google.picker.Response.DOCUMENTS];
+          const id = docs?.[0]?.[google.picker.Document.ID];
+          if (typeof id !== 'string' || !/^[\w-]{16,200}$/.test(id)) {
+            step('picker-invalid-selection');
+            finish(null, new Error('Google did not return a valid spreadsheet. Please choose it again.'));
+          } else finish(id);
+        } else if (action === google.picker.Action.CANCEL) {
+          step('picker-cancelled');
+          finish(null);
+        } else if (action === google.picker.Action.ERROR) {
+          step('picker-error');
+          finish(null, new Error('Google Picker reported an error. Check the Google setup guide and connection diagnostics.'));
+        } else step(action === 'loaded' ? 'picker-loaded' : 'picker-other-event');
+      } catch {
+        step('picker-response-error');
+        finish(null, new Error('The console could not process the picker response. Please try again and check connection diagnostics.'));
+      }
+    }
+    try {
+      step('picker-opening');
+      const view = new google.picker.DocsView(google.picker.ViewId.SPREADSHEETS)
+        .setMode(google.picker.DocsViewMode.LIST)
+        .setMimeTypes('application/vnd.google-apps.spreadsheet');
+      picker = new google.picker.PickerBuilder()
+        .addView(view)
+        .setTitle('Choose a church-owned prayer group spreadsheet')
+        .setOAuthToken(token)
+        .setDeveloperKey(config.apiKey)
+        .setAppId(config.projectNumber)
+        .setOrigin(window.location.origin)
+        .setCallback(data => queueMicrotask(() => receive(data)))
+        .build();
+      signal.addEventListener('abort', abort, { once: true });
+      if (signal.aborted) { abort(); return; }
+      picker.setVisible(true);
+      step('picker-open');
+      waitingTimer = setTimeout(() => { if (!settled) step('picker-waiting'); }, 45000);
+    } catch {
+      step('picker-open-error');
+      finish(null, new Error('The spreadsheet picker could not open. Reload the console and check connection diagnostics.'));
+    }
   });
 }

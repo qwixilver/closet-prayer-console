@@ -3,6 +3,7 @@ import React, { StrictMode, useDeferredValue, useEffect, useEffectEvent, useRef,
 import { createRoot } from 'react-dom/client';
 import { loadGoogle, pickSpreadsheet, readConfig, requestGoogleSession } from './google.js';
 import { GoogleAccessError, readGroup, readProfile } from './groupReader.js';
+import { appendConnectionStep, CONNECTION_STEPS, formatConnectionSteps } from './connectionDiagnostics.js';
 import './style.css';
 
 const config = readConfig(import.meta.env);
@@ -66,6 +67,7 @@ function App() {
   const [group, setGroup] = useState(null);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
+  const [connectionSteps, setConnectionSteps] = useState([]);
   const operation = useRef({ version: 0, controller: null });
 
   function begin(label) {
@@ -84,6 +86,7 @@ function App() {
     setGroup(null);
     setBusy('');
     setError(message);
+    setConnectionSteps([]);
   }
   function report(error, current) {
     if (!isCurrent(current)) return;
@@ -140,13 +143,21 @@ function App() {
     if (Date.now() >= connection.session.expiresAt) { expire(); return; }
     const current = begin('Choosing a spreadsheet');
     setGroup(null);
+    setConnectionSteps([]);
+    const recordStep = code => {
+      if (isCurrent(current)) setConnectionSteps(events => appendConnectionStep(events, code));
+    };
     try {
-      const id = await pickSpreadsheet(config, connection.session.token, current.controller.signal);
+      const id = await pickSpreadsheet(config, connection.session.token, current.controller.signal, recordStep);
       if (!id || !isCurrent(current)) return;
+      recordStep('group-reading');
       setBusy('Reading group');
       const result = await readGroup(id, connection.session, { signal: current.controller.signal });
-      if (isCurrent(current) && Date.now() < connection.session.expiresAt) setGroup(result);
-    } catch (error) { report(error, current); }
+      if (isCurrent(current) && Date.now() < connection.session.expiresAt) {
+        setGroup(result);
+        recordStep('group-loaded');
+      }
+    } catch (error) { recordStep('connection-failed'); report(error, current); }
     finally { if (isCurrent(current)) setBusy(''); }
   }
 
@@ -181,10 +192,17 @@ function App() {
             {!sdkReady ? 'Loading Google...' : connection ? 'Choose a spreadsheet' : 'Connect Google account'}</button>
             : <a className="button primary" href="./setup.html">Set up the Google connection</a>}
           <p className="permission-note">Google permission covers files you select, not your entire Drive. That permission includes editing; this preview only reads data.</p>
+          <p className="permission-note">Confirm the spreadsheet with the picker's Select or Open button. This preview keeps your sign-in and chosen group only until you leave or reload the page.</p>
           <hr /><h3>What works in this preview?</h3><p>Connect an account, select a group, and read its submissions and prayers. Approvals and editing still use the spreadsheet's Closet Prayer menu.</p>
           <a href={groupGuide}>Need to create a church group?</a>
         </section>
       </div>}
+      {connectionSteps.length > 0 && <details className="connection-diagnostics">
+        <summary>Connection diagnostics</summary>
+        <p role="status">{CONNECTION_STEPS[connectionSteps.at(-1).code]}</p>
+        <p className="small muted">If selection stalls, close Google's picker using its Cancel button or X, then select and copy the text below before refreshing. It contains no keys, tokens, email addresses, file names, file IDs, or prayer text.</p>
+        <textarea aria-label="Connection diagnostics report" readOnly rows={8} value={formatConnectionSteps(connectionSteps)} onFocus={event => event.target.select()} />
+      </details>}
     </main>
     <footer><p>No central prayer database. No console data saved for offline use.</p><nav aria-label="Resources"><a href="./setup.html">Google setup</a><a href="./privacy.html">Privacy</a><a href="https://github.com/qwixilver/closet-prayer-console">Source code</a><a href="./LICENSE.txt">GPL-3.0</a><a href="./THIRD_PARTY_NOTICES.txt">Third-party notices</a><a href="https://closetprayer.com/">Prayer journal</a></nav></footer>
   </div>;

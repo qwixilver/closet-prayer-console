@@ -7,7 +7,9 @@ journal at https://closetprayer.com remains independent and local-first.
 
 Implemented: Google account connection, per-file Google Picker selection, Editor
 permission checks, read-only submissions/prayers, search, refresh, session expiry,
-and responsive cards. No administrator-count cap and no central prayer database.
+responsive cards, and selectable, memory-only connection diagnostics containing
+fixed step names and timestamps. No administrator-count cap and no central prayer
+database.
 
 **Not implemented:** console approval/edit/withdraw operations, group creation,
 roles beyond spreadsheet permissions, automatic account reconnection, or other
