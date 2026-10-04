@@ -2,6 +2,9 @@
 export const CONNECTION_STEPS = Object.freeze({
   'picker-opening': 'Preparing Google Picker',
   'picker-open': 'Picker opened; waiting for confirmation',
+  'picker-frame-loaded': 'The Google picker frame finished a load (not proof of sign-in or selection)',
+  'picker-frame-reloaded': 'The Google picker frame loaded again',
+  'picker-frame-message': 'A message arrived from the Google picker frame (contents not recorded)',
   'picker-loaded': 'Google reported that the picker loaded',
   'picker-other-event': 'Google sent a non-selection picker event',
   'picker-waiting': 'Still waiting for Google to confirm or cancel the selection',
@@ -9,6 +12,7 @@ export const CONNECTION_STEPS = Object.freeze({
   'picker-invalid-selection': 'Google returned an invalid spreadsheet identifier',
   'picker-cancelled': 'Google reported that the picker was cancelled',
   'picker-interrupted': 'The console interrupted the picker',
+  'picker-closed-by-user': 'You closed the picker using the console recovery prompt',
   'picker-error': 'Google reported a picker error',
   'picker-open-error': 'The picker could not be opened',
   'picker-response-error': 'The console could not process the picker response',

@@ -140,7 +140,7 @@ test('profile is fetched from Google rather than decoded from an unverified toke
 });
 
 test('no persistence, untrusted HTML injection, or provider write methods are introduced', async () => {
-  for (const path of ['../src/main.jsx', '../src/google.js', '../src/groupReader.js', '../src/connectionDiagnostics.js']) {
+  for (const path of ['../src/main.jsx', '../src/google.js', '../src/groupReader.js', '../src/connectionDiagnostics.js', '../src/pickerFrameDiagnostics.js', '../src/PickerRecovery.jsx']) {
     const source = await readFile(new URL(path, import.meta.url), 'utf8');
     assert.doesNotMatch(source, /localStorage|sessionStorage|indexedDB|dangerouslySetInnerHTML|console\.log/);
     assert.doesNotMatch(source, /method:\s*['"](?:POST|PUT|DELETE|PATCH)['"]/);

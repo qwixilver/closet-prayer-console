@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { loadGoogle, pickSpreadsheet, readConfig, requestGoogleSession } from './google.js';
 import { GoogleAccessError, readGroup, readProfile } from './groupReader.js';
 import { appendConnectionStep, CONNECTION_STEPS, formatConnectionSteps } from './connectionDiagnostics.js';
+import { PickerRecovery } from './PickerRecovery.jsx';
 import './style.css';
 
 const config = readConfig(import.meta.env);
@@ -68,6 +69,8 @@ function App() {
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const [connectionSteps, setConnectionSteps] = useState([]);
+  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
+  const diagnosticsReport = useRef(null);
   const operation = useRef({ version: 0, controller: null });
 
   function begin(label) {
@@ -87,7 +90,18 @@ function App() {
     setBusy('');
     setError(message);
     setConnectionSteps([]);
+    setDiagnosticsOpen(false);
   }
+  function closePicker() {
+    setConnectionSteps(events => appendConnectionStep(events, 'picker-closed-by-user'));
+    operation.current.controller?.abort();
+    operation.current = { version: operation.current.version + 1, controller: null };
+    setBusy('');
+    setDiagnosticsOpen(true);
+  }
+  useEffect(() => {
+    if (diagnosticsOpen && !busy) diagnosticsReport.current?.focus();
+  }, [diagnosticsOpen, busy]);
   function report(error, current) {
     if (!isCurrent(current)) return;
     if (error instanceof GoogleAccessError && error.status === 401) disconnect(error.message);
@@ -144,6 +158,7 @@ function App() {
     const current = begin('Choosing a spreadsheet');
     setGroup(null);
     setConnectionSteps([]);
+    setDiagnosticsOpen(false);
     const recordStep = code => {
       if (isCurrent(current)) setConnectionSteps(events => appendConnectionStep(events, code));
     };
@@ -197,11 +212,13 @@ function App() {
           <a href={groupGuide}>Need to create a church group?</a>
         </section>
       </div>}
-      {connectionSteps.length > 0 && <details className="connection-diagnostics">
+      {busy === 'Choosing a spreadsheet' && connectionSteps.some(step => step.code === 'picker-waiting') && <PickerRecovery onClose={closePicker} />}
+      {connectionSteps.length > 0 && <details className="connection-diagnostics" open={diagnosticsOpen} onToggle={event => setDiagnosticsOpen(event.currentTarget.open)}>
         <summary>Connection diagnostics</summary>
         <p role="status">{CONNECTION_STEPS[connectionSteps.at(-1).code]}</p>
-        <p className="small muted">If selection stalls, close Google's picker using its Cancel button or X, then select and copy the text below before refreshing. It contains no keys, tokens, email addresses, file names, file IDs, or prayer text.</p>
-        <textarea aria-label="Connection diagnostics report" readOnly rows={8} value={formatConnectionSteps(connectionSteps)} onFocus={event => event.target.select()} />
+        <p className="small muted">If selection stalls, a Closet Prayer recovery prompt appears above Google's picker after 45 seconds. Choose Close picker and show diagnostics, then copy this report before refreshing. It contains no keys, tokens, email addresses, file names, file IDs, or prayer text.</p>
+        {connectionSteps.some(step => step.code === 'picker-waiting') && !connectionSteps.some(step => step.code === 'picker-selection-received') && <p className="small muted">No confirmed selection was received. Try the console directly in another browser to compare. Browser privacy settings or extensions are possible causes, not a confirmed diagnosis. See <a href="./setup.html#picker-stalled" target="_blank" rel="noopener noreferrer">picker troubleshooting</a>. Keep your spreadsheet private and API key restricted.</p>}
+        <textarea ref={diagnosticsReport} aria-label="Connection diagnostics report" readOnly rows={8} value={formatConnectionSteps(connectionSteps)} onFocus={event => event.target.select()} />
       </details>}
     </main>
     <footer><p>No central prayer database. No console data saved for offline use.</p><nav aria-label="Resources"><a href="./setup.html">Google setup</a><a href="./privacy.html">Privacy</a><a href="https://github.com/qwixilver/closet-prayer-console">Source code</a><a href="./LICENSE.txt">GPL-3.0</a><a href="./THIRD_PARTY_NOTICES.txt">Third-party notices</a><a href="https://closetprayer.com/">Prayer journal</a></nav></footer>

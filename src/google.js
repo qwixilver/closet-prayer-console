@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
+import { observePickerFrame } from './pickerFrameDiagnostics.js';
+
 export const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
 export const SCOPES = ['openid', 'https://www.googleapis.com/auth/userinfo.email',
   'https://www.googleapis.com/auth/userinfo.profile', DRIVE_SCOPE];
@@ -80,6 +82,7 @@ export function pickSpreadsheet(config, token, signal, onStep = () => {}) {
     let picker;
     let settled = false;
     let waitingTimer;
+    let stopObserving = () => {};
     function step(code) {
       // Only fixed step names leave this adapter, never Google's response data.
       try { onStep(code); } catch { /* Diagnostics must not interrupt selection. */ }
@@ -88,6 +91,7 @@ export function pickSpreadsheet(config, token, signal, onStep = () => {}) {
       if (settled) return;
       settled = true;
       clearTimeout(waitingTimer);
+      stopObserving();
       signal.removeEventListener('abort', abort);
       try { picker?.setVisible(false); } catch { step('picker-cleanup-warning'); }
       // Let Google's callback stack unwind before disposing its dialog. Cleanup
@@ -142,6 +146,7 @@ export function pickSpreadsheet(config, token, signal, onStep = () => {}) {
       signal.addEventListener('abort', abort, { once: true });
       if (signal.aborted) { abort(); return; }
       picker.setVisible(true);
+      try { stopObserving = observePickerFrame(step); } catch { /* Optional diagnostics cannot prevent selection. */ }
       step('picker-open');
       waitingTimer = setTimeout(() => { if (!settled) step('picker-waiting'); }, 45000);
     } catch {

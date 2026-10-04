@@ -8,7 +8,10 @@ journal at https://closetprayer.com remains independent and local-first.
 Implemented: Google account connection, per-file Google Picker selection, Editor
 permission checks, read-only submissions/prayers, search, refresh, session expiry,
 responsive cards, and selectable, memory-only connection diagnostics containing
-fixed step names and timestamps. No administrator-count cap and no central prayer
+fixed step names and timestamps. A top-layer recovery prompt offers to close a
+stalled Picker after 45 seconds without signing out or losing diagnostics. Frame
+diagnostics observe load/message arrival only, never message contents or file
+authorization. No administrator-count cap and no central prayer
 database.
 
 **Not implemented:** console approval/edit/withdraw operations, group creation,
@@ -57,6 +60,9 @@ The optional browser test uses Playwright with Edge. After a normal unconfigured
 and run `node tests/browser.mjs`. The test creates its own mock-configured build,
 starts and stops temporary servers on ports 4175/4176, and intercepts all Google
 responses. Never use real credentials or church data in fixtures.
+Set `CP_LIVE_GOOGLE_SDK=1` to also test recovery against Google's real public
+Picker library. Only SDK scripts are live; account sign-in, frame contents, and
+file API responses remain intercepted. This does not validate a real selection.
 
 ## Security boundaries
 

@@ -45,6 +45,9 @@ async function mockContext(options = {}) {
   const data = responses();
   await context.route('https://**/*', async route => {
     const url = new URL(route.request().url());
+    if (url.hostname === 'docs.google.com' && url.pathname === '/picker') {
+      return route.fulfill({ contentType: 'text/html', body: '<!doctype html><p>Test picker frame</p><script>parent.postMessage("PRIVATE MESSAGE CONTENT", "http://localhost:4176");</script>' });
+    }
     if (url.hostname === 'accounts.google.com' && url.pathname === '/gsi/client') {
       const script = `window.google = { accounts: { oauth2: { initTokenClient(config) {
         return { requestAccessToken() { setTimeout(() => config.callback({ access_token: 'test-only-token',
@@ -53,6 +56,7 @@ async function mockContext(options = {}) {
       return route.fulfill({ contentType: 'application/javascript', body: script });
     }
     if (url.hostname === 'apis.google.com') {
+      if (options.realSdk) return route.continue();
       const script = `window.gapi = { load(_name, config) {
         class View { setMode() { return this; } setMimeTypes() { return this; } }
         class Builder {
@@ -60,6 +64,7 @@ async function mockContext(options = {}) {
           setDeveloperKey() { return this; } setAppId() { return this; } setOrigin() { return this; }
           setCallback(callback) { this.callback = callback; return this; }
           build() {
+            window.testPickerCallback = this.callback;
             let dialog;
             return {
               dispose() {
@@ -77,11 +82,14 @@ async function mockContext(options = {}) {
                 };
                 const cancel = document.createElement('button');
                 cancel.textContent = 'Cancel test picker';
-                cancel.onclick = () => this.callback({ action: 'cancel' });
-                dialog.append(select, cancel);
+                cancel.onclick = () => { if (!${Boolean(options.noCallbacks)}) this.callback({ action: 'cancel' }); };
+                const frame = document.createElement('iframe');
+                frame.src = 'https://docs.google.com/picker';
+                frame.title = 'Test picker transport';
+                dialog.append(select, cancel, frame);
                 document.body.append(dialog);
                 dialog.showModal();
-                setTimeout(() => this.callback({ action: 'loaded' }), 0);
+                if (!${Boolean(options.noCallbacks)}) setTimeout(() => this.callback({ action: 'loaded' }), 0);
               },
             };
           }
@@ -239,6 +247,7 @@ try {
   await connectAndChoose(silent.page);
   await silent.page.clock.fastForward(46000);
   assert.equal(silent.state.apiCalls.length, 1, 'No file read before Google confirms selection');
+  await silent.page.getByRole('button', { name: 'Keep choosing', exact: true }).click();
   await silent.page.getByRole('button', { name: 'Cancel test picker' }).click();
   await silent.page.getByRole('dialog', { name: 'Test Google Picker' }).waitFor({ state: 'hidden' });
   await silent.page.getByText('Connection diagnostics', { exact: true }).click();
@@ -250,6 +259,68 @@ try {
   assert.deepEqual(silent.errors, []);
   await silent.context.close();
   console.log('PASS: missing selection callback is diagnosable and cancellable without reading files');
+
+  const stalled = await mockContext({ silentSelection: true, noCallbacks: true });
+  await stalled.page.clock.install();
+  await stalled.page.setViewportSize({ width: 360, height: 800 });
+  await connectAndChoose(stalled.page);
+  await stalled.page.getByRole('button', { name: 'Cancel test picker' }).click();
+  await stalled.page.clock.fastForward(46000);
+  await stalled.page.getByRole('dialog', { name: 'Still choosing a spreadsheet?' }).waitFor();
+  await noOverflow(stalled.page);
+  await stalled.page.screenshot({ path: resolve(output, 'picker-recovery-mobile.png'), fullPage: true, animations: 'disabled' });
+  await stalled.page.getByRole('button', { name: 'Keep choosing', exact: true }).click();
+  await stalled.page.clock.fastForward(46000);
+  await stalled.page.getByRole('button', { name: 'Close picker and show diagnostics' }).click();
+  await stalled.page.getByRole('dialog', { name: 'Test Google Picker' }).waitFor({ state: 'hidden' });
+  const stalledReport = stalled.page.getByRole('textbox', { name: 'Connection diagnostics report' });
+  await stalledReport.waitFor({ state: 'visible' });
+  assert.equal(await stalledReport.evaluate(element => element === document.activeElement), true);
+  assert.match(await stalledReport.inputValue(), /picker-closed-by-user/);
+  assert.doesNotMatch(await stalledReport.inputValue(), /picker-loaded|picker-selection-received|PRIVATE|example.invalid/);
+  assert.equal(await stalled.page.getByRole('button', { name: 'Choose a spreadsheet' }).isEnabled(), true);
+  await stalled.page.evaluate(id => window.testPickerCallback({ action: 'picked', docs: [{ id }] }), fileId);
+  await delay(100);
+  assert.equal(stalled.state.apiCalls.length, 1, 'Late callback after recovery cannot read a file');
+  await stalled.page.getByRole('button', { name: 'Choose a spreadsheet' }).click();
+  await stalled.page.evaluate(id => window.testPickerCallback({ action: 'picked', docs: [{ id }] }), fileId);
+  await stalled.page.getByRole('heading', { name: 'Example Church Test Group' }).waitFor();
+  assert.equal(await stalled.page.getByRole('dialog', { name: 'Still choosing a spreadsheet?' }).count(), 0);
+  assert.deepEqual(stalled.errors, []);
+  await stalled.context.close();
+  console.log('PASS: recovery works above a blocking modal with no callbacks, keeps diagnostics/login, ignores late events, and allows retry');
+
+  if (process.env.CP_LIVE_GOOGLE_SDK === '1') {
+    // Load the real public SDK but intercept authentication, Picker content and
+    // data reads. This uses no Google account and never exposes real records.
+    const live = await mockContext({ realSdk: true });
+    await live.page.clock.install();
+    await live.page.getByRole('button', { name: 'Connect Google account' }).click();
+    await live.page.getByRole('button', { name: 'Choose a spreadsheet' }).click();
+    await live.page.locator('.picker-dialog').waitFor();
+    await live.page.locator('iframe.picker-dialog-frame').waitFor();
+    await live.page.frameLocator('iframe.picker-dialog-frame').getByText('Test picker frame').waitFor();
+    await live.page.clock.fastForward(46000);
+    await live.page.getByRole('dialog', { name: 'Still choosing a spreadsheet?' }).waitFor();
+    for (const width of [1280, 360]) {
+      await live.page.setViewportSize({ width, height: 800 });
+      const recovery = live.page.getByRole('dialog', { name: 'Still choosing a spreadsheet?' });
+      assert.equal(await recovery.evaluate(element => element.closest('[aria-hidden="true"]') === null), true);
+      const box = await recovery.boundingBox();
+      assert.ok(box.x >= 0 && box.x + box.width <= width);
+      await live.page.screenshot({ path: resolve(output, `real-picker-recovery-${width}.png`), animations: 'disabled' });
+    }
+    await live.page.getByRole('button', { name: 'Close picker and show diagnostics' }).click();
+    assert.equal(await live.page.locator('.picker-dialog, .picker-dialog-bg').count(), 0);
+    const report = await live.page.getByRole('textbox', { name: 'Connection diagnostics report' }).inputValue();
+    assert.match(report, /picker-frame-message/);
+    assert.match(report, /picker-closed-by-user/);
+    assert.doesNotMatch(report, /PRIVATE|picker-selection-received|group-reading/);
+    assert.equal(live.state.apiCalls.length, 1, 'No file read without the real SDK selection callback');
+    assert.deepEqual(live.errors, []);
+    await live.context.close();
+    console.log('PASS: recovery above the real Google SDK dialog/overlay, accessibility visibility, frame transport diagnostics, no account or file access');
+  }
 } finally {
   await browser?.close();
   for (const child of children) if (child.exitCode === null) child.kill();

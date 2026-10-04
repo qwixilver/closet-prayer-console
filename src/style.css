@@ -56,6 +56,10 @@ input { border: 1px solid var(--line); background: #182231; color: var(--text); 
 .connection-diagnostics { margin-top: 28px; padding: 18px; border: 1px solid var(--line); border-radius: 10px; }
 .connection-diagnostics summary { cursor: pointer; color: var(--gold); }
 .connection-diagnostics textarea { display: block; width: 100%; resize: vertical; background: var(--bg); color: var(--text); border: 1px solid var(--line); padding: 12px; font: .8rem/1.6 monospace; }
+.picker-recovery { width: min(540px, calc(100% - 32px)); max-height: calc(100dvh - 32px); overflow: auto; padding: 28px; border: 1px solid var(--gold); border-radius: 14px; background: var(--panel); color: var(--text); box-shadow: 0 20px 80px #0009; }
+.picker-recovery::backdrop { background: #070d19b8; }
+.picker-recovery h2 { font-size: 1.8rem; font-weight: normal; }
+.picker-recovery .actions { margin-block: 24px; }
 footer { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 14px; padding: 25px 0 30px; border-top: 1px solid var(--line); font-size: .76rem; color: var(--muted); }
 footer p { margin: 0; }
 footer nav { display: flex; flex-wrap: wrap; gap: 18px; }
