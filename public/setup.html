@@ -2,7 +2,7 @@
 <html lang="en">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="referrer" content="strict-origin-when-cross-origin"><title>Google connection setup | Closet Prayer Console</title><link rel="stylesheet" href="./document.css"></head>
 <body><main class="document">
-<header><a href="./">Closet Prayer / Administrator console</a><h1>Set up the Google connection</h1><p class="muted">A new-project guide for the console operator. Updated October 2, 2026.</p></header>
+<header><a href="./">Closet Prayer / Administrator console</a><h1>Set up the Google connection</h1><p class="muted">A new-project guide for the console operator. Updated October 4, 2026.</p></header>
 <p class="callout"><strong>This is a connection preview, not the finished management console.</strong> Account connection and group reading are implemented. Approval, editing, and group configuration still use the existing spreadsheet workflow. Real Google sign-in must be tested after these settings are supplied.</p>
 <h2>Who does this setup?</h2>
 <p>The operator of <strong>console.closetprayer.com</strong> completes this once for the hosted console. Each church does <em>not</em> need its own Cloud project just to use that console. Churches keep their own spreadsheets and Apps Script deployments, and share spreadsheet Editor access with their administrators.</p>
@@ -17,7 +17,7 @@
 <p>No Firebase database, Cloud Run server, service account, or paid hosting deployment is needed by this implementation. Do not turn on unrelated services.</p>
 
 <h2>2. Configure Google authorization</h2>
-<p>In <strong>Google Auth Platform</strong>, choose <strong>Get started</strong> if needed. Set the app name, a real support email, and a monitored developer contact. Use an <strong>External</strong> audience so administrators from different churches can connect. Keep the app in <strong>Testing</strong> initially and add the Google accounts you will test under <strong>Audience &gt; Test users</strong>. Follow <a href="https://developers.google.com/workspace/guides/configure-oauth-consent">Google's consent-screen guide</a> if the menu labels differ.</p>
+<p>Open <a href="https://console.cloud.google.com/auth/branding">Google Auth Platform &gt; Branding</a> inside Google Cloud Console, and confirm that your Closet Prayer project is selected at the top. Choose <strong>Get started</strong> if needed. Set the app name, a real support email, and a monitored developer contact. Use an <strong>External</strong> audience so administrators from different churches can connect. Keep the app in <strong>Testing</strong> initially and add the Google accounts you will test under <strong>Audience &gt; Test users</strong>. Follow <a href="https://developers.google.com/workspace/guides/configure-oauth-consent">Google's consent-screen guide</a> if the menu labels differ.</p>
 <p>In <strong>Data Access</strong>, request only these scopes:</p>
 <pre><code>openid
 https://www.googleapis.com/auth/userinfo.email
@@ -35,13 +35,16 @@ http://localhost:4175</code></pre>
 <p>Use only the origins you actually need. Origins have no path, trailing slash, or wildcard. Use <code>localhost</code>, not a Tailscale IP, for local Google sign-in testing. Mobile testing of the Google connection should use the configured HTTPS console domain.</p>
 <p>Record the <strong>client ID</strong>, ending in <code>.apps.googleusercontent.com</code>. The console uses Google's browser popup flow and needs no redirect URL or client secret. Do not put a secret in source code, repository variables, or chat. See <a href="https://developers.google.com/identity/oauth2/web/guides/get-google-api-clientid">Google's client setup guidance</a>.</p>
 
-<h2>4. Create and restrict the Picker API key</h2>
-<p>In the same project's <strong>APIs &amp; Services &gt; Credentials</strong>, create an <strong>API key</strong> and edit its restrictions immediately.</p>
+<h2 id="picker-key">4. Create and restrict the Picker API key</h2>
+<p>In the same project's <a href="https://console.cloud.google.com/apis/credentials">APIs &amp; Services &gt; Credentials</a>, create an <strong>API key</strong> and edit its restrictions immediately. If you already created the key, open that existing key rather than replacing it.</p>
 <p>Under <strong>Application restrictions</strong>, choose <strong>Websites (HTTP referrers)</strong>. Allow:</p>
 <pre><code>https://console.closetprayer.com/*
+https://docs.google.com/*
 http://localhost:5174/*
 http://localhost:4175/*</code></pre>
-<p>Under <strong>API restrictions</strong>, restrict the key to <strong>Google Picker API</strong>. The console's Drive and Sheets reads use OAuth rather than this key. Keep the OAuth client, API key, and numeric project number in the same project. See <a href="https://developers.google.com/workspace/drive/picker/guides/web-picker">Google's Picker setup guide</a>.</p>
+<p><strong>The Google Docs address is required:</strong> the file picker runs inside a Google-hosted frame. Omitting it can cause <strong>The API developer key is invalid</strong> even when the key was copied correctly. These are the API key's website restrictions, not the OAuth client's Authorized JavaScript origins. See <a href="https://developers.google.com/workspace/drive/picker/guides/web-picker">Google's explanation of Picker website restrictions</a>.</p>
+<p>Under <strong>API restrictions</strong>, choose <strong>Restrict key</strong> and select both <strong>Google Picker API</strong> and <strong>Google Drive API</strong>, following <a href="https://developers.google.com/workspace/drive/picker/guides/web-picker-sample">Google's web Picker setup example</a>. Keep both APIs enabled in the project. The console's own Drive and Sheets reads still use OAuth; this does not broaden the requested account permissions. Keep the OAuth client, API key, and numeric project number in the same project.</p>
+<p>Save the restrictions, allow a few minutes for the changes to take effect, then reload the console and try choosing a spreadsheet again. Changing restrictions on the existing key does not require changing the GitHub variable or rebuilding the site. If the key value itself changes, update the variable and redeploy as described below. Keep the key restricted; do not make the spreadsheet public to resolve this error.</p>
 <p class="callout">A browser API key is visible in the published website. Restricting it is essential; hiding it in a build secret does not make it private. The key identifies the project, but does not by itself grant access to a church's spreadsheet.</p>
 
 <h2>5. Add the three public settings</h2>
@@ -74,7 +77,7 @@ http://localhost:4175/*</code></pre>
 <h2>If something does not connect</h2>
 <ul>
 <li><strong>Origin mismatch:</strong> compare the exact website address with the authorized JavaScript origins, including the local port.</li>
-<li><strong>Picker error:</strong> check the key's referrers, enabled Picker API, and matching project number. Restrictions can take time to propagate.</li>
+<li><strong>The API developer key is invalid:</strong> first check the <a href="#picker-key">API key restrictions in step 4</a>, including the Google-hosted frame address and both allowed APIs. Account connection can succeed while the separate Picker key is rejected. If it still fails, confirm the key, OAuth client, and project number belong to the same project, and that the deployed site was rebuilt after any key-value change. Do not paste keys or access tokens into a support request.</li>
 <li><strong>Access denied:</strong> check OAuth test users, spreadsheet Editor sharing, enabled APIs, and any Google Workspace administrator restrictions. Do not make the sheet public to bypass an error.</li>
 <li><strong>Wrong template:</strong> select a configured Closet Prayer group spreadsheet with unchanged <code>Requests</code> and <code>Inbox</code> headers.</li>
 <li><strong>Session expired:</strong> connect again. The console deliberately does not store refresh tokens or automatically maintain an indefinite login.</li>
