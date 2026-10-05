@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+import { parseConsoleSettings, parseCommands } from './consoleProtocol.js';
 export const REQUEST_HEADERS = ['id', 'publication', 'visibility', 'consent', 'title', 'description', 'requestor', 'requestedAt', 'status'];
 export const INBOX_HEADERS = ['id', 'receivedAt', 'title', 'description', 'requestor', 'contact', 'allowedSharing', 'reviewStatus'];
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
@@ -9,11 +10,18 @@ export class GoogleAccessError extends Error {
   constructor(message, status) { super(message); this.status = status; }
 }
 
-async function getJson(url, session, { signal, fetchImpl = fetch } = {}) {
+export async function googleJson(url, session, { signal, fetchImpl = fetch } = {}, payload) {
+  const target = new URL(url);
+  if (target.protocol !== 'https:' || target.username || target.password || target.port || target.hash ||
+      !((target.hostname === 'sheets.googleapis.com' && /^\/v4\/spreadsheets\/[\w-]{16,200}(?:\/values(?::batchGet|\/ConsoleCommands!A:E:append))?$/.test(target.pathname)) ||
+        (target.hostname === 'www.googleapis.com' && /^\/drive\/v3\/files\/[\w-]{16,200}$/.test(target.pathname)) ||
+        (target.hostname === 'openidconnect.googleapis.com' && target.pathname === '/v1/userinfo')) ||
+      (payload && !(target.hostname === 'sheets.googleapis.com' && target.pathname.endsWith('/values/ConsoleCommands!A:E:append')))) throw new Error('Unsupported authenticated Google request.');
   if (Date.now() >= session.expiresAt) throw new GoogleAccessError('Your Google session expired. Connect again.', 401);
   // The caller constructs every URL; tokens never go to a church-provided endpoint.
   const response = await fetchImpl(url, {
-    method: 'GET', headers: { Authorization: `Bearer ${session.token}` },
+    method: payload ? 'POST' : 'GET', headers: { Authorization: `Bearer ${session.token}`, ...(payload ? { 'Content-Type': 'application/json' } : {}) },
+    ...(payload ? { body: JSON.stringify(payload) } : {}),
     credentials: 'omit', cache: 'no-store', redirect: 'error',
     signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(20000)]) : AbortSignal.timeout(20000),
   });
@@ -27,12 +35,12 @@ async function getJson(url, session, { signal, fetchImpl = fetch } = {}) {
     throw new GoogleAccessError(messages[response.status] || 'Google could not complete the request. Please try again later.', response.status);
   }
   const body = await response.text();
-  if (body.length > MAX_RESPONSE) throw new Error('This group is too large for the connection preview. Use the spreadsheet to archive older rows.');
+  if (body.length > MAX_RESPONSE) throw new Error('This group is too large for the console. Use the spreadsheet to archive older rows.');
   try { return JSON.parse(body); } catch { throw new Error('Google returned an unreadable response. Please try again.'); }
 }
 
 export async function readProfile(session, options) {
-  const profile = await getJson('https://openidconnect.googleapis.com/v1/userinfo', session, options);
+  const profile = await googleJson('https://openidconnect.googleapis.com/v1/userinfo', session, options);
   if (!profile || typeof profile.sub !== 'string' || typeof profile.email !== 'string' || profile.email_verified !== true) {
     throw new Error('A verified Google account email is required to connect.');
   }
@@ -41,7 +49,7 @@ export async function readProfile(session, options) {
 
 function dateText(value, label) {
   if (typeof value !== 'string' && typeof value !== 'number') throw new Error(`${label}: invalid date.`);
-  const date = typeof value === 'number' ? new Date((value - 25569) * 86400000) : new Date(value);
+  const date = typeof value === 'number' ? new Date(Math.round((value - 25569) * 86400000)) : new Date(value);
   if (!value || !Number.isFinite(date.getTime())) throw new Error(`${label}: invalid date.`);
   return date.toISOString();
 }
@@ -86,13 +94,13 @@ export async function readGroup(fileId, session, options) {
   const driveUrl = new URL(`https://www.googleapis.com/drive/v3/files/${fileId}`);
   driveUrl.searchParams.set('fields', 'id,name,mimeType,trashed,capabilities(canEdit)');
   driveUrl.searchParams.set('supportsAllDrives', 'true');
-  const file = await getJson(driveUrl.href, session, options);
+  const file = await googleJson(driveUrl.href, session, options);
   if (file.trashed || file.mimeType !== 'application/vnd.google-apps.spreadsheet') throw new Error('Select an existing Google spreadsheet, not an uploaded workbook or a deleted file.');
   if (file.capabilities?.canEdit !== true) throw new GoogleAccessError('Administrator access requires Editor permission on this spreadsheet. Ask the church owner to share it with your Google account.', 403);
   const base = `https://sheets.googleapis.com/v4/spreadsheets/${fileId}`;
   const metadataUrl = new URL(base);
   metadataUrl.searchParams.set('fields', 'sheets(properties(title,gridProperties(rowCount,columnCount)))');
-  const metadata = await getJson(metadataUrl.href, session, options);
+  const metadata = await googleJson(metadataUrl.href, session, options);
   const ranges = ['Requests', 'Inbox'].map((title, i) => {
     const sheet = metadata.sheets?.find(item => item.properties?.title === title)?.properties;
     const width = i === 0 ? REQUEST_HEADERS.length : INBOX_HEADERS.length;
@@ -105,12 +113,20 @@ export async function readGroup(fileId, session, options) {
     return `'${title}'!A1:${i === 0 ? 'I' : 'H'}${sheet.gridProperties.rowCount}`;
   });
   const valuesUrl = new URL(`${base}/values:batchGet`);
+  const consoleTabs = ['ConsoleSettings', 'ConsoleCommands'].map(title => metadata.sheets?.find(item => item.properties?.title === title)?.properties);
+  const hasConsole = consoleTabs.every(Boolean);
+  if (hasConsole) consoleTabs.forEach((sheet, i) => {
+    if (!Number.isInteger(sheet.gridProperties?.rowCount) || sheet.gridProperties.rowCount < 1) throw new Error('Invalid console tabs.');
+    ranges.push(`'${sheet.title}'!A1:${i === 0 ? 'B' : 'E'}${sheet.gridProperties.rowCount}`);
+  });
   ranges.forEach(range => valuesUrl.searchParams.append('ranges', range));
   valuesUrl.searchParams.set('valueRenderOption', 'UNFORMATTED_VALUE');
   valuesUrl.searchParams.set('dateTimeRenderOption', 'SERIAL_NUMBER');
-  const data = await getJson(valuesUrl.href, session, options);
-  if (data.valueRanges?.length !== 2) throw new Error('Google did not return both group tabs. Please try again.');
+  const data = await googleJson(valuesUrl.href, session, options);
+  if (data.valueRanges?.length !== ranges.length) throw new Error('Google did not return all group tabs. Please try again.');
   return { id: fileId, name: typeof file.name === 'string' ? file.name : 'Church spreadsheet',
     requests: parseRows(data.valueRanges[0].values, 'Requests'),
-    inbox: parseRows(data.valueRanges[1].values, 'Inbox'), loadedAt: Date.now() };
+    inbox: parseRows(data.valueRanges[1].values, 'Inbox'), loadedAt: Date.now(),
+    management: hasConsole ? parseConsoleSettings(data.valueRanges[2].values) : null,
+    commands: hasConsole ? parseCommands(data.valueRanges[3].values) : [] };
 }

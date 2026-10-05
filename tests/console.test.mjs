@@ -139,10 +139,10 @@ test('profile is fetched from Google rather than decoded from an unverified toke
   await assert.rejects(readProfile(session(), mockFetch([{ sub: '123', email: 'test@example.invalid', email_verified: false }])), /verified/);
 });
 
-test('no persistence, untrusted HTML injection, or provider write methods are introduced', async () => {
-  for (const path of ['../src/main.jsx', '../src/google.js', '../src/groupReader.js', '../src/connectionDiagnostics.js', '../src/pickerFrameDiagnostics.js', '../src/PickerRecovery.jsx']) {
+test('no persistent browser storage or untrusted HTML injection is introduced', async () => {
+  for (const path of ['../src/main.jsx', '../src/google.js', '../src/groupReader.js', '../src/connectionDiagnostics.js', '../src/pickerFrameDiagnostics.js', '../src/PickerRecovery.jsx', '../src/Dashboard.jsx', '../src/groupWriter.js', '../src/consoleProtocol.js']) {
     const source = await readFile(new URL(path, import.meta.url), 'utf8');
     assert.doesNotMatch(source, /localStorage|sessionStorage|indexedDB|dangerouslySetInnerHTML|console\.log/);
-    assert.doesNotMatch(source, /method:\s*['"](?:POST|PUT|DELETE|PATCH)['"]/);
+    assert.doesNotMatch(source, /method:\s*['"](?:PUT|DELETE|PATCH)['"]/);
   }
 });

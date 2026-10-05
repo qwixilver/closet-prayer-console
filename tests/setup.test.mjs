@@ -26,6 +26,18 @@ test('authorization instructions link directly to the Google Auth Platform', () 
   assert.match(guide, /href="https:\/\/console.cloud.google.com\/auth\/branding"/);
 });
 
+test('management upgrade keeps working OAuth setup and deployment addresses, and includes a live write checklist', () => {
+  const section = guide.split('<h2 id="management-upgrade">')[1]?.split('<h2>If something')[0];
+  assert.ok(section);
+  assert.match(section, /Services \+ &gt; Google Sheets API &gt; Add/);
+  assert.match(section, /same <code>\/exec<\/code> URL/);
+  assert.match(section, /public submission link/);
+  assert.match(section, /not its member invitation/);
+  assert.match(section, /two Editors/);
+  assert.match(section, /does not undo/);
+  assert.match(section, /Automated tests use simulated Google responses/);
+});
+
 test('Brave workaround keeps Shields enabled and explains the site-only cookie tradeoff', () => {
   const cookieSection = guide.split('<h3 id="brave-cookies">')[1]?.split('<footer>')[0];
   assert.ok(cookieSection, 'Brave cookie help anchor is missing');

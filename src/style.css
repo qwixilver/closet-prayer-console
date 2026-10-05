@@ -48,8 +48,19 @@ input { border: 1px solid var(--line); background: #182231; color: var(--text); 
 .description { white-space: pre-wrap; width: 100%; }
 .details { display: flex; flex-wrap: wrap; gap: 10px 24px; color: var(--muted); font-size: .85rem; }
 .contact { border-top: 1px solid var(--line); padding-top: 13px; margin-bottom: 0; color: var(--muted); font-size: .84rem; }
-.preview-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 15px; margin-top: 24px; }
-.preview-actions p { color: var(--muted); font-size: .84rem; }
+.editor, .submission-panel { margin: 28px 0; padding: 26px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+.editor h2, .submission-panel h2 { margin-top: 0; font-weight: normal; font-size: 1.7rem; }
+.editor fieldset { padding: 0; border: 0; margin: 0; min-width: 0; }
+.editor label, .submission-panel label { display: grid; gap: 7px; margin-bottom: 18px; font-size: .88rem; }
+.editor textarea, .submission-panel textarea, select { width: 100%; padding: 12px; border: 1px solid var(--line); background: var(--bg); color: var(--text); border-radius: 8px; font: inherit; }
+.editor textarea, .submission-panel textarea { resize: vertical; }
+.editor-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 18px; }
+.editor .check { display: flex; align-items: flex-start; gap: 10px; }
+.editor .check input { width: auto; margin-top: 5px; }
+.card-actions { margin-top: 18px; }
+.command-history { margin-block: 32px; padding: 20px; border: 1px solid var(--line); border-radius: 10px; }
+.command-history summary { cursor: pointer; color: var(--gold); }
+.history-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; border-top: 1px solid var(--line); padding: 12px 0; font-size: .85rem; }
 .empty { padding: 40px 24px; text-align: center; border: 1px dashed var(--line); border-radius: 12px; color: var(--muted); }
 .error { background: #51272f; border: 1px solid #945263; color: #ffe4e7; padding: 16px 20px; border-radius: 10px; margin-bottom: 24px; }
 .progress { display: flex; align-items: center; flex-wrap: wrap; gap: 16px; margin-bottom: 24px; color: var(--gold); }
@@ -78,6 +89,8 @@ footer a { color: var(--muted); }
   .search { width: 100%; }
 }
 @media (max-width: 460px) {
+  .editor, .submission-panel { padding: 18px; }
+  .editor-columns { grid-template-columns: 1fr; }
   .site-header { flex-wrap: wrap; padding: 20px 0; gap: 16px; }
   .account { width: 100%; justify-content: space-between; }
   .account > span { max-width: 65%; }

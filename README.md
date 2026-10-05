@@ -3,10 +3,10 @@
 A separate, static console for church-owned Closet Prayer groups. The prayer
 journal at https://closetprayer.com remains independent and local-first.
 
-## Status: connection preview
+## Status: group-management pilot
 
 Implemented: Google account connection, per-file Google Picker selection, Editor
-permission checks, read-only submissions/prayers, search, refresh, session expiry,
+permission checks, submissions/prayers, search, refresh, session expiry,
 responsive cards, and selectable, memory-only connection diagnostics containing
 fixed step names and timestamps. A top-layer recovery prompt offers to close a
 stalled Picker after 45 seconds without signing out or losing diagnostics. Frame
@@ -14,11 +14,15 @@ diagnostics observe load/message arrival only, never message contents or file
 authorization. No administrator-count cap and no central prayer
 database.
 
-**Not implemented:** console approval/edit/withdraw operations, group creation,
-roles beyond spreadsheet permissions, automatic account reconnection, or other
-storage providers. Continue using the spreadsheet's Closet Prayer menu to manage
-requests. Browser/API mocks do not prove real OAuth or Workspace compatibility;
-complete the live checklist in the setup guide before using real prayer data.
+Management adds draft creation, editing, publishing/withdrawal, answered status,
+submission approval/decline, retryable change history, and a verified public form
+link/iframe. Each church must upgrade its bound script and enable management;
+older sheets remain read-only. Original group-only consent cannot be widened.
+
+**Not implemented:** group creation inside the console, roles beyond spreadsheet
+permissions, automatic account reconnection, or other storage providers. Browser
+and API mocks do not prove live write/redirect/Workspace compatibility; complete
+the live checklist in the setup guide before using real prayer data.
 
 ## Google project and hosting setup
 
@@ -27,6 +31,14 @@ served as `/setup.html` on the console website. It covers OAuth, restricted Pick
 keys, test users, Pages, the manual Cloudflare DNS record, and live verification.
 The console operator configures one Google project; each church retains its own
 spreadsheet and Apps Script deployment. A self-hosted fork uses its own project.
+
+Already connected? Start at [Enable management](public/setup.html#management-upgrade),
+not the OAuth setup. Update Code.gs and its manifest in the existing church script,
+enable the Sheets advanced service, update the existing web deployment's version,
+and run **Closet Prayer > Enable administrator console** in the sheet with its
+public submission link. Templates and the church guide live in the
+[journal repository](https://github.com/qwixilver/P.U.S.H.-Prayer_Journal/tree/main/group-service/google-apps-script)
+and are distributed at https://closetprayer.com/guides/groups/.
 
 Three public browser settings are needed, following `.env.example`:
 
@@ -75,15 +87,20 @@ file API responses remain intercepted. This does not validate a real selection.
 
 - Google enforces file access; a group invitation is not an administrator login.
 - `drive.file` allows access to selected/previously authorized files, not all Drive.
-  It includes write access, but this release only issues GET requests.
+  The console appends commands to the selected private sheet using this permission.
 - Tokens, account details, and downloaded prayers stay in page memory. No personal
   journal database, browser persistence, analytics, or prayer-content logs.
 - Google tokens never go to user-provided Apps Script URLs. No arbitrary provider
   endpoint can receive authenticated Google requests.
-- Console reads only template Requests/Inbox columns. File-level authorization is
-  broader than those columns; spreadsheet Editors are trusted administrators.
-- Read-only controls are intentional. See [the next milestone](docs/architecture.md)
-  for required authorization, privacy, and concurrency work before enabling writes.
+- Console reads Requests/Inbox plus ConsoleSettings/ConsoleCommands. File-level
+  authorization is broader than those columns; Editors are trusted administrators.
+- The church script serializes console/menu/submission changes, checks row versions,
+  and atomically writes console changes with their receipts. A public submission
+  token can wake an existing private command, not supply a mutation or read prayers.
+- Direct cell edits and other API clients bypass the script lock. Do not sort,
+  delete, or manually edit rows during saves. See [architecture](docs/architecture.md).
+- Commands contain prayer wording and remain in the private sheet. History is not
+  a tamper-proof audit log. Disconnecting cannot undo an already queued change.
 
 ## Deploy
 

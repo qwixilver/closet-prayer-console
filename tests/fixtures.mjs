@@ -13,3 +13,14 @@ export function responses() {
     { valueRanges: [{ values: [requestHeaders, requestRow] }, { values: [inboxHeaders, inboxRow] }] },
   ];
 }
+
+export const groupId = '11111111-2222-4333-8444-555555555555';
+export const endpoint = 'https://script.google.com/macros/s/test_deployment_1234567890/exec';
+export const settingsRows = [['key', 'value'], ['protocol', 'cp-console'], ['version', '1'], ['groupId', groupId], ['endpoint', endpoint], ['submissionToken', 'S'.repeat(43)]];
+export const commandHeaders = ['id', 'createdAt', 'command', 'outcome', 'completedAt'];
+export function managedResponses(commands = []) {
+  const data = responses();
+  data[1].sheets.push(...['ConsoleSettings', 'ConsoleCommands'].map(title => ({ properties: { title, gridProperties: { rowCount: 1000, columnCount: 5 } } })));
+  data[2].valueRanges.push({ values: structuredClone(settingsRows) }, { values: [commandHeaders, ...commands] });
+  return data;
+}

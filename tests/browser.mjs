@@ -5,7 +5,7 @@ import { createRequire } from 'node:module';
 import { dirname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
-import { fileId, responses } from './fixtures.mjs';
+import { fileId, groupId, endpoint, responses, managedResponses } from './fixtures.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require(process.env.CP_PLAYWRIGHT_PATH || 'playwright');
@@ -41,8 +41,9 @@ async function noOverflow(page) {
 
 async function mockContext(options = {}) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
-  const state = { apiCalls: [], viewer: false, denyRefresh: false, delayValues: false, pending: null };
-  const data = responses();
+  const state = { apiCalls: [], viewer: false, denyRefresh: false, delayValues: false, pending: null, loseProcess: false, conflict: false, mismatch: false };
+  const data = structuredClone(options.managed ? managedResponses() : responses());
+  state.data = data;
   await context.route('https://**/*', async route => {
     const url = new URL(route.request().url());
     if (url.hostname === 'docs.google.com' && url.pathname === '/picker') {
@@ -102,8 +103,45 @@ async function mockContext(options = {}) {
       return route.fulfill({ contentType: 'application/javascript', body: script });
     }
     state.apiCalls.push({ url: url.href, method: route.request().method() });
+    if (url.href === endpoint) {
+      assert.equal(route.request().headers().authorization, undefined);
+      assert.equal(route.request().method(), 'POST');
+      const request = route.request().postDataJSON();
+      assert.equal(request.token, 'S'.repeat(43));
+      assert.equal(request.command, undefined);
+      const body = { protocol: 'cp-group', version: 1, ok: true, group: { id: groupId }, consoleVersion: 1, sheetId: state.mismatch ? 'different_sheet_123456' : fileId };
+      if (request.action === 'console-process') {
+        const row = data[2].valueRanges[3].values.find(row => row[0] === request.requestId);
+        assert.ok(row);
+        if (row[3] === 'pending') {
+          const command = JSON.parse(row[2]);
+          row[3] = state.conflict ? 'conflict' : 'applied';
+          row[4] = new Date().toISOString();
+          if (!state.conflict) {
+            const requests = data[2].valueRanges[0].values;
+            const submission = data[2].valueRanges[1].values.find(row => row[0] === command.id);
+            const previous = requests.find(row => row[0] === command.id);
+            if (command.type === 'approve' || command.type === 'decline') submission[7] = command.type === 'approve' ? 'approved' : 'declined';
+            if (command.type !== 'decline') {
+              const p = command.prayer;
+              const values = [command.id, p.publication, p.visibility, previous?.[3] || submission?.[6] || p.consent, p.title, p.description, p.requestor, p.requestedAt, p.status];
+              if (previous) previous.splice(0, previous.length, ...values); else requests.push(values);
+            }
+          }
+        }
+        body.outcome = row[3];
+        if (state.loseProcess) { state.loseProcess = false; return route.abort('failed'); }
+      } else assert.equal(request.action, 'console-info');
+      return route.fulfill({ contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(body) });
+    }
     assert.equal(route.request().headers().authorization, 'Bearer test-only-token');
-    assert.equal(route.request().method(), 'GET', 'Console made a write request');
+    if (options.managed && url.pathname.endsWith('/values/ConsoleCommands!A:E:append')) {
+      assert.equal(route.request().method(), 'POST');
+      assert.equal(url.searchParams.get('valueInputOption'), 'RAW');
+      data[2].valueRanges[3].values.push(...route.request().postDataJSON().values);
+      return route.fulfill({ contentType: 'application/json', body: '{}' });
+    }
+    assert.equal(route.request().method(), 'GET', 'Unexpected write request');
     let body;
     if (url.hostname === 'openidconnect.googleapis.com') body = { sub: 'test', email: 'admin@example.invalid', email_verified: true, name: 'Test Admin' };
     else if (url.hostname === 'www.googleapis.com') {
@@ -158,7 +196,7 @@ try {
   await setupPage.getByRole('link', { name: 'Set up the Google connection' }).click();
   await setupPage.getByRole('heading', { name: 'Set up the Google connection' }).waitFor();
   await noOverflow(setupPage);
-  assert.equal(await setupPage.locator('h2').count(), 9);
+  await setupPage.getByRole('heading', { name: 'Enable management for an existing group' }).waitFor();
   await setupPage.goto('http://localhost:4175/privacy.html');
   await noOverflow(setupPage);
   assert.deepEqual(external, [], 'Unconfigured console should not contact Google');
@@ -170,7 +208,8 @@ try {
   await page.getByRole('heading', { name: 'Example Church Test Group' }).waitFor();
   assert.equal(await page.getByRole('dialog', { name: 'Test Google Picker' }).count(), 0);
   assert.ok(await page.getByText('Administrator-only contact: private-test@example.invalid').isVisible());
-  assert.equal(await page.getByRole('button', { name: 'Approve submissions' }).isDisabled(), true);
+  assert.ok(await page.getByText('Script upgrade required for editing.').isVisible());
+  assert.equal(await page.getByRole('button', { name: 'Review and approve' }).count(), 0);
   await page.getByRole('button', { name: 'Prayers 1' }).click();
   await page.getByRole('heading', { name: 'A sample prayer for testing' }).waitFor();
   assert.equal(await page.getByText('Sharing permitted', { exact: true }).count(), 0);
@@ -209,6 +248,102 @@ try {
   assert.deepEqual(errors, []);
   await context.close();
   console.log('PASS: group read/search, privacy labels, Editor check, rejected refresh, sign-out race, no storage/writes, responsive descriptions');
+
+  const managed = await mockContext({ managed: true });
+  const mp = managed.page;
+  await connectAndChoose(mp);
+  await mp.getByRole('button', { name: 'Review and approve' }).click();
+  assert.equal(await mp.getByLabel('Sharing', { exact: true }).locator('option[value="shareable"]').evaluate(option => option.disabled), true);
+  await mp.getByRole('button', { name: 'Approve and publish', exact: true }).click();
+  await mp.getByRole('status').filter({ hasText: 'Change applied' }).waitFor();
+  assert.equal(managed.state.data[2].valueRanges[1].values[1][7], 'approved');
+  assert.equal(managed.state.data[2].valueRanges[0].values.length, 3);
+  assert.doesNotMatch(JSON.stringify(managed.state.data[2].valueRanges[0]), /private-test@/);
+  await mp.getByRole('button', { name: 'New prayer', exact: true }).click();
+  await mp.getByLabel('Prayer title', { exact: true }).fill('New console prayer');
+  await mp.getByLabel('Prayer request', { exact: true }).fill('A fictional request that uses the full card width.');
+  await mp.getByLabel('Publication', { exact: true }).selectOption('published');
+  await mp.getByRole('checkbox', { name: /I have permission/ }).check();
+  await mp.getByLabel('Sharing', { exact: true }).selectOption('shareable');
+  await mp.setViewportSize({ width: 360, height: 800 });
+  await noOverflow(mp);
+  await mp.screenshot({ path: resolve(output, 'prayer-editor-mobile.png'), fullPage: true, animations: 'disabled' });
+  managed.state.loseProcess = true;
+  await mp.getByRole('button', { name: 'Save prayer', exact: true }).click();
+  await mp.getByRole('alert').filter({ hasText: 'result is uncertain' }).waitFor();
+  const commandCount = managed.state.data[2].valueRanges[3].values.length;
+  await mp.getByRole('button', { name: 'Check / retry this save', exact: true }).click();
+  await mp.getByRole('status').filter({ hasText: 'Change applied' }).waitFor();
+  assert.equal(managed.state.data[2].valueRanges[3].values.length, commandCount);
+  await mp.getByRole('button', { name: 'Prayers 3' }).click();
+  const created = mp.locator('article').filter({ has: mp.getByRole('heading', { name: 'New console prayer' }) });
+  await created.getByRole('button', { name: 'Edit prayer' }).click();
+  await mp.getByLabel('Status', { exact: true }).selectOption('answered');
+  await mp.getByLabel('Publication', { exact: true }).selectOption('withdrawn');
+  await mp.getByRole('button', { name: 'Save prayer', exact: true }).click();
+  await created.getByText('withdrawn / answered', { exact: true }).waitFor();
+  await created.getByRole('button', { name: 'Edit prayer' }).click();
+  await mp.getByLabel('Prayer title', { exact: true }).fill('Stale title');
+  managed.state.conflict = true;
+  await mp.getByRole('button', { name: 'Save prayer', exact: true }).click();
+  await mp.getByRole('alert').filter({ hasText: 'record changed' }).waitFor();
+  assert.equal(managed.state.data[2].valueRanges[0].values.at(-1)[4], 'New console prayer');
+  await mp.getByRole('button', { name: 'Close editor' }).click();
+  managed.state.conflict = false;
+  await mp.getByRole('button', { name: 'Verify service and show embed' }).click();
+  const embed = await mp.getByLabel('Church website iframe').inputValue();
+  assert.match(embed, /#group=CPG1\.s\./);
+  assert.doesNotMatch(embed, /CPG1\.m\.|test-only-token|private-test/);
+  assert.equal((await mp.getByLabel('Public submission link').inputValue()), new URL(embed.match(/src="([^"]+)"/)[1]).href);
+  await noOverflow(mp);
+  await mp.screenshot({ path: resolve(output, 'management-mobile.png'), fullPage: true, animations: 'disabled' });
+  await mp.setViewportSize({ width: 1280, height: 900 });
+  await noOverflow(mp);
+  await mp.screenshot({ path: resolve(output, 'management-desktop.png'), fullPage: true, animations: 'disabled' });
+  assert.deepEqual(await mp.evaluate(() => [localStorage.length, sessionStorage.length]), [0, 0]);
+  assert.deepEqual(managed.errors, []);
+  await managed.context.close();
+
+  const declined = await mockContext({ managed: true });
+  await connectAndChoose(declined.page);
+  await declined.page.getByRole('button', { name: 'Decline', exact: true }).click();
+  await declined.page.getByRole('button', { name: 'Confirm decline' }).click();
+  await declined.page.getByRole('status').filter({ hasText: 'Change applied' }).waitFor();
+  assert.equal(declined.state.data[2].valueRanges[1].values[1][7], 'declined');
+  assert.equal(declined.state.data[2].valueRanges[0].values.length, 2);
+  declined.state.mismatch = true;
+  await declined.page.getByRole('button', { name: 'Verify service and show embed' }).click();
+  await declined.page.getByRole('alert').filter({ hasText: 'does not belong' }).waitFor();
+  assert.equal(await declined.page.getByLabel('Church website iframe').count(), 0);
+  await declined.context.close();
+
+  const pending = await mockContext({ managed: true });
+  await connectAndChoose(pending.page);
+  await pending.page.getByRole('button', { name: 'New prayer', exact: true }).click();
+  await pending.page.getByLabel('Prayer title', { exact: true }).fill('Pending prayer');
+  // Lose the response after Google accepts the append, before the service runs.
+  await pending.context.route('https://sheets.googleapis.com/**/values/ConsoleCommands!A:E:append?*', async route => {
+    pending.state.data[2].valueRanges[3].values.push(...route.request().postDataJSON().values);
+    await route.abort('failed');
+  });
+  await pending.page.getByRole('button', { name: 'Save prayer', exact: true }).click();
+  await pending.page.getByRole('alert').filter({ hasText: 'result is uncertain' }).waitFor();
+  await pending.page.getByRole('button', { name: 'Close editor' }).click();
+  await pending.page.getByRole('button', { name: 'Refresh', exact: true }).click();
+  await pending.page.getByText('Change history (1)', { exact: true }).click();
+  await pending.page.getByRole('button', { name: 'Check / finish pending change' }).click();
+  await pending.page.getByRole('status').filter({ hasText: 'Change applied' }).waitFor();
+  assert.equal(pending.state.data[2].valueRanges[3].values.length, 2);
+  assert.equal(pending.state.data[2].valueRanges[0].values.at(-1)[4], 'Pending prayer');
+  pending.state.denyRefresh = true;
+  await pending.page.getByRole('button', { name: 'New prayer', exact: true }).click();
+  await pending.page.getByLabel('Prayer title', { exact: true }).fill('Must not be written');
+  await pending.page.getByRole('button', { name: 'Save prayer', exact: true }).click();
+  await pending.page.getByRole('alert').filter({ hasText: 'Google denied access' }).waitFor();
+  assert.equal(await pending.page.getByRole('heading', { name: 'Example Church Test Group' }).count(), 0);
+  assert.equal(pending.state.data[2].valueRanges[3].values.length, 2);
+  await pending.context.close();
+  console.log('PASS: console approval, create/edit/withdraw, consent, contact isolation, interrupted-save retry, stale edits, decline, verified iframe links, and mobile editor layout');
 
   const denied = await mockContext({ denyScope: true });
   await denied.page.getByRole('button', { name: 'Connect Google account' }).click();

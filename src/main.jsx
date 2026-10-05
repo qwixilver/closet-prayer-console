@@ -1,66 +1,17 @@
 // SPDX-License-Identifier: GPL-3.0-only
-import React, { StrictMode, useDeferredValue, useEffect, useEffectEvent, useRef, useState } from 'react';
+import React, { StrictMode, useEffect, useEffectEvent, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { loadGoogle, pickSpreadsheet, readConfig, requestGoogleSession } from './google.js';
 import { GoogleAccessError, readGroup, readProfile } from './groupReader.js';
 import { appendConnectionStep, CONNECTION_STEPS, formatConnectionSteps } from './connectionDiagnostics.js';
 import { PickerRecovery } from './PickerRecovery.jsx';
+import { Dashboard } from './Dashboard.jsx';
+import { processPending, saveCommand } from './groupWriter.js';
 import './style.css';
 
 const config = readConfig(import.meta.env);
 const groupGuide = 'https://closetprayer.com/guides/groups/';
 
-function PrayerCard({ row, inbox }) {
-  return <article className="prayer-card">
-    <div className="card-meta"><span className={`tag ${row.sharing === 'group-only' ? 'private' : ''}`}>
-      {row.sharing === 'group-only' ? 'Group only' : 'Sharing permitted'}</span>
-      <span>{inbox ? row.reviewStatus : `${row.publication} / ${row.status}`}</span></div>
-    <h3>{row.title}</h3>
-    <p className="description">{row.description || 'No description provided.'}</p>
-    <div className="details"><span>Requested by {row.requestor || 'Not provided'}</span>
-      <time dateTime={row.date}>{new Date(row.date).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}</time></div>
-    {inbox && row.contact && <p className="contact">Administrator-only contact: {row.contact}</p>}
-  </article>;
-}
-
-function Dashboard({ group, busy, onChoose, onRefresh }) {
-  const [tab, setTab] = useState('inbox');
-  const [query, setQuery] = useState('');
-  const search = useDeferredValue(query.trim().toLocaleLowerCase());
-  const inbox = tab === 'inbox';
-  const rows = (inbox ? group.inbox : group.requests).filter(row =>
-    [row.title, row.description, row.requestor].some(value => value.toLocaleLowerCase().includes(search)));
-  const pending = group.inbox.filter(row => row.reviewStatus === 'pending').length;
-  const published = group.requests.filter(row => row.publication === 'published').length;
-  return <>
-    <section className="group-heading">
-      <div><p className="eyebrow">Connected spreadsheet</p><h1>{group.name}</h1>
-        <p className="muted">Last read {new Date(group.loadedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}. Refresh to see new submissions.</p></div>
-      <div className="actions"><button onClick={onRefresh} disabled={busy}>Refresh</button>
-        <button onClick={onChoose} disabled={busy}>Change group</button></div>
-    </section>
-    <div className="stats" aria-label="Group summary">
-      <div><strong>{pending}</strong><span>Awaiting review</span></div>
-      <div><strong>{published}</strong><span>Published prayers</span></div>
-      <div><strong>{group.requests.filter(row => row.sharing === 'group-only').length}</strong><span>Group-only prayers</span></div>
-    </div>
-    <aside className="notice"><strong>Read-only connection preview.</strong> Review your data here; continue approving and editing through the spreadsheet's Closet Prayer menu.
-      <a href={`https://docs.google.com/spreadsheets/d/${group.id}/edit`} target="_blank" rel="noopener noreferrer">Open spreadsheet</a>
-    </aside>
-    <section className="board" aria-label="Group records">
-      <div className="board-tools"><div className="tabs" aria-label="Record type">
-        <button aria-pressed={inbox} onClick={() => setTab('inbox')}>Submissions <span>{group.inbox.length}</span></button>
-        <button aria-pressed={!inbox} onClick={() => setTab('prayers')}>Prayers <span>{group.requests.length}</span></button>
-      </div><label className="search">Search records<input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Title, description, or requestor" /></label></div>
-      <p className="muted small">{inbox ? 'Includes pending, approved, and declined submissions. Contact details are for administrators only.' : 'Includes published prayers, drafts, and withdrawn requests. Sharing respects both visibility and recorded consent.'}</p>
-      <div className="records">{rows.length ? rows.map(row => <PrayerCard key={row.id} row={row} inbox={inbox} />)
-        : <div className="empty"><h3>{search ? 'No matching records' : inbox ? 'No submissions yet' : 'No prayer requests yet'}</h3>
-          <p>{search ? 'Try another search.' : 'New records will appear after they are added to this spreadsheet and you refresh.'}</p></div>}</div>
-      <div className="preview-actions"><button disabled>{inbox ? 'Approve submissions' : 'Edit prayers'}</button>
-        <p>Console editing is not enabled in this milestone. No spreadsheet changes are made here.</p></div>
-    </section>
-  </>;
-}
 
 function App() {
   const [sdkReady, setSdkReady] = useState(false);
@@ -68,9 +19,11 @@ function App() {
   const [group, setGroup] = useState(null);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [connectionSteps, setConnectionSteps] = useState([]);
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   const diagnosticsReport = useRef(null);
+  const errorReport = useRef(null);
   const operation = useRef({ version: 0, controller: null });
 
   function begin(label) {
@@ -79,6 +32,7 @@ function App() {
     operation.current = current;
     setBusy(label);
     setError('');
+    setNotice('');
     return current;
   }
   function isCurrent(current) { return operation.current === current && !current.controller.signal.aborted; }
@@ -89,6 +43,7 @@ function App() {
     setGroup(null);
     setBusy('');
     setError(message);
+    setNotice('');
     setConnectionSteps([]);
     setDiagnosticsOpen(false);
   }
@@ -102,6 +57,7 @@ function App() {
   useEffect(() => {
     if (diagnosticsOpen && !busy) diagnosticsReport.current?.focus();
   }, [diagnosticsOpen, busy]);
+  useEffect(() => { if (error) errorReport.current?.focus(); }, [error]);
   function report(error, current) {
     if (!isCurrent(current)) return;
     if (error instanceof GoogleAccessError && error.status === 401) disconnect(error.message);
@@ -185,14 +141,37 @@ function App() {
     finally { if (isCurrent(current)) setBusy(''); }
   }
 
+  async function manage(change, resume = false) {
+    if (!connection || busy) return false;
+    if (Date.now() >= connection.session.expiresAt) { expire(); return false; }
+    const current = begin('Saving changes');
+    try {
+      const options = { signal: current.controller.signal };
+      const updated = await (resume ? processPending(group, change, connection.session, options) : saveCommand(group, change, connection.session, options));
+      if (!isCurrent(current) || Date.now() >= connection.session.expiresAt) return false;
+      setGroup(updated); setNotice('Change applied and spreadsheet reloaded.'); return true;
+    } catch (error) {
+      if (!isCurrent(current)) return false;
+      if (error instanceof GoogleAccessError && [401, 403, 404].includes(error.status)) {
+        report(new GoogleAccessError(`${error.message} A change already sent may still finish. Check history after access is restored.`, error.status), current);
+      }
+      else setError(error instanceof TypeError || ['TimeoutError', 'AbortError'].includes(error.name)
+        ? 'The save result is uncertain. A queued change may still exist. Retry this same save, or close the editor and refresh the change history before creating another change.'
+        : `${error.message} If a change was queued, check its history before creating another change.`);
+      return false;
+    } finally { if (isCurrent(current)) setBusy(''); }
+  }
+
   return <div className="app-shell">
     <header className="site-header"><a className="brand" href="./"><span className="brand-mark" aria-hidden="true">CP</span><span>Closet Prayer<small>Administrator console</small></span></a>
-      <div className="account">{connection ? <><span>{connection.profile.email}</span><button onClick={() => disconnect()}>Sign out</button></> : <span className="tag">Connection preview</span>}</div>
+      <div className="account">{connection ? <><span>{connection.profile.email}</span><button onClick={() => disconnect()}>Sign out</button></> : <span className="tag">Church-owned groups</span>}</div>
     </header>
     <main id="main">
-      {error && <div className="error" role="alert">{error}</div>}
+      {error && <div ref={errorReport} tabIndex={-1} className="error" role="alert">{error}</div>}
+      {notice && <div className="notice" role="status">{notice}</div>}
       {busy && <div className="progress" role="status">{busy}... <button onClick={() => disconnect()}>Cancel and disconnect</button></div>}
-      {group ? <Dashboard key={group.id} group={group} busy={Boolean(busy)} onChoose={choose} onRefresh={refresh} /> : <div className="welcome-grid">
+      {busy === 'Saving changes' && <p className="notice">Disconnecting does not undo a change already sent to Google. Reconnect and check change history if the result is uncertain.</p>}
+      {group ? <Dashboard key={group.id} group={group} busy={Boolean(busy)} onChoose={choose} onRefresh={refresh} onSave={manage} onProcess={id => manage(id, true)} /> : <div className="welcome-grid">
         <section className="welcome"><p className="eyebrow">Church-owned. People-centered.</p><h1>A place to care<br />for every request.</h1>
           <p className="lede">Connect your church's prayer group without handing its records to a central database.</p>
           <div className="principles"><div><span>01</span><p><strong>Your church keeps the data.</strong> Prayer requests stay in your Google spreadsheet.</p></div>
@@ -200,16 +179,16 @@ function App() {
             <div><span>03</span><p><strong>Your journal stays personal.</strong> The console never opens or changes your local prayer journal.</p></div></div>
         </section>
         <section className="connection-panel" aria-label="Connect a group">
-          <span className="tag">First milestone</span>
+          <span className="tag">Group management</span>
           <h2>{!config.ready ? 'Google setup required' : connection ? 'Choose your group' : 'Connect with Google'}</h2>
           <p>{!config.ready ? 'The console is ready for its Google Cloud configuration. Sign-in will be available after the site operator completes the setup guide.' : connection ? 'Select the spreadsheet already configured for your church. Your Google account must have Editor access.' : 'Use the Google account that owns your church spreadsheet, or one the owner has added as an Editor.'}</p>
           {config.ready ? <button className="primary" disabled={!sdkReady || Boolean(busy)} onClick={connection ? choose : connect}>
             {!sdkReady ? 'Loading Google...' : connection ? 'Choose a spreadsheet' : 'Connect Google account'}</button>
             : <a className="button primary" href="./setup.html">Set up the Google connection</a>}
-          <p className="permission-note">Google permission covers files you select, not your entire Drive. That permission includes editing; this preview only reads data.</p>
-          <p className="permission-note">Confirm the spreadsheet with the picker's Select or Open button. This preview keeps your sign-in and chosen group only until you leave or reload the page.</p>
+          <p className="permission-note">Google permission covers files you select, not your entire Drive. Editing requires the upgraded church service. Older sheets remain read-only until upgraded.</p>
+          <p className="permission-note">Confirm the spreadsheet with the picker's Select or Open button. Your sign-in and chosen group remain only until you leave or reload the page.</p>
           {config.ready && <p className="permission-note">Google picker stuck in Brave? <a href="./setup.html#brave-cookies" target="_blank" rel="noopener noreferrer">Browser cookie help</a> explains a site-only workaround without turning Shields off.</p>}
-          <hr /><h3>What works in this preview?</h3><p>Connect an account, select a group, and read its submissions and prayers. Approvals and editing still use the spreadsheet's Closet Prayer menu.</p>
+          <hr /><h3>Manage your church group</h3><p>Review submissions, create and edit prayers, publish or withdraw requests, and get your church website's submission form.</p>
           <a href={groupGuide}>Need to create a church group?</a>
         </section>
       </div>}
