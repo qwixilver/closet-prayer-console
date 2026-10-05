@@ -21,6 +21,11 @@ h1 { font-size: clamp(2.35rem, 4.5vw, 3.65rem); line-height: 1.12; font-weight: 
 .connection-panel h2 { margin: 23px 0 14px; font-size: 2rem; font-weight: normal; }
 .connection-panel p { color: var(--muted); }
 .connection-panel .primary { width: 100%; margin-top: 14px; }
+.connection-panel button + button { width: 100%; margin-top: 12px; }
+.setup-wizard { max-width: 780px; margin-inline: auto; overflow-wrap: anywhere; }
+.setup-wizard h1 { font-size: 2.5rem; }
+.setup-steps { display: flex; gap: 12px 30px; flex-wrap: wrap; padding-left: 20px; color: var(--gold); }
+.invitation-qr { display: block; width: 100%; max-width: 420px; background: white; margin-block: 20px; }
 .permission-note { font-size: .81rem; }
 hr { border: 0; border-top: 1px solid var(--line); margin: 25px 0; }
 .tag { display: inline-block; border: 1px solid #5d5334; border-radius: 30px; padding: 4px 11px; color: #f4d979; background: #eab3080b; font-size: .7rem; white-space: nowrap; }

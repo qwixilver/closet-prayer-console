@@ -4,6 +4,7 @@ import { observePickerFrame } from './pickerFrameDiagnostics.js';
 export const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
 export const SCOPES = ['openid', 'https://www.googleapis.com/auth/userinfo.email',
   'https://www.googleapis.com/auth/userinfo.profile', DRIVE_SCOPE];
+export const SETUP_SCOPES = ['https://www.googleapis.com/auth/script.projects', 'https://www.googleapis.com/auth/script.deployments'];
 
 export function readConfig(env) {
   const clientId = (env.VITE_GOOGLE_CLIENT_ID || '').trim();
@@ -60,14 +61,20 @@ export function parseToken(response, now = Date.now()) {
 }
 
 // Called synchronously from a button click so Google's popup retains the user gesture.
-export function requestGoogleSession(config) {
+export function requestGoogleSession(config, setup = false) {
   return new Promise((resolve, reject) => {
     const client = window.google.accounts.oauth2.initTokenClient({
       client_id: config.clientId,
-      scope: SCOPES.join(' '),
+      scope: [...SCOPES, ...(setup ? SETUP_SCOPES : [])].join(' '),
       include_granted_scopes: false,
       callback: response => {
-        try { resolve(parseToken(response)); } catch (error) { reject(error); }
+        try {
+          const session = parseToken(response);
+          if (setup && !SETUP_SCOPES.every(scope => (response.scope || '').split(/\s+/).includes(scope))) {
+            throw new Error('Group creation needs Google script-management permission. Existing groups do not need this extra permission.');
+          }
+          resolve(session);
+        } catch (error) { reject(error); }
       },
       error_callback: () => reject(new Error('The Google window was closed or blocked. Allow popups and try again.')),
     });

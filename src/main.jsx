@@ -6,6 +6,7 @@ import { GoogleAccessError, readGroup, readProfile } from './groupReader.js';
 import { appendConnectionStep, CONNECTION_STEPS, formatConnectionSteps } from './connectionDiagnostics.js';
 import { PickerRecovery } from './PickerRecovery.jsx';
 import { Dashboard } from './Dashboard.jsx';
+import { CreateGroup } from './CreateGroup.jsx';
 import { processPending, saveCommand } from './groupWriter.js';
 import './style.css';
 
@@ -17,6 +18,8 @@ function App() {
   const [sdkReady, setSdkReady] = useState(false);
   const [connection, setConnection] = useState(null);
   const [group, setGroup] = useState(null);
+  const [creating, setCreating] = useState(false);
+  const [groupSetup, setGroupSetup] = useState(null);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -40,6 +43,7 @@ function App() {
     operation.current.controller?.abort();
     operation.current = { version: operation.current.version + 1, controller: null };
     setConnection(null);
+    setCreating(false); setGroupSetup(null);
     setGroup(null);
     setBusy('');
     setError(message);
@@ -125,7 +129,8 @@ function App() {
       setBusy('Reading group');
       const result = await readGroup(id, connection.session, { signal: current.controller.signal });
       if (isCurrent(current) && Date.now() < connection.session.expiresAt) {
-        setGroup(result);
+        if (result.setup && result.setup.phase !== 'ready') { setGroupSetup(result.setup); setCreating(true); }
+        else setGroup(result);
         recordStep('group-loaded');
       }
     } catch (error) { recordStep('connection-failed'); report(error, current); }
@@ -136,7 +141,20 @@ function App() {
     const current = begin('Refreshing group');
     try {
       const result = await readGroup(group.id, connection.session, { signal: current.controller.signal });
-      if (isCurrent(current) && Date.now() < connection.session.expiresAt) setGroup(result);
+      if (isCurrent(current) && Date.now() < connection.session.expiresAt) {
+        if (result.setup && result.setup.phase !== 'ready') { setGroup(null); setGroupSetup(result.setup); setCreating(true); }
+        else setGroup(result);
+      }
+    } catch (error) { report(error, current); }
+    finally { if (isCurrent(current)) setBusy(''); }
+  }
+
+  async function created(sheetId) {
+    const current = begin('Opening your group');
+    try {
+      const result = await readGroup(sheetId, connection.session, { signal: current.controller.signal });
+      if (result.setup?.phase !== 'ready') throw new Error('Setup is not yet complete. Select the same spreadsheet to resume.');
+      if (isCurrent(current)) { setGroup(result); setCreating(false); setGroupSetup(null); setNotice('Your group is ready. Create a prayer, invite members, or get the website submission form below.'); }
     } catch (error) { report(error, current); }
     finally { if (isCurrent(current)) setBusy(''); }
   }
@@ -171,7 +189,7 @@ function App() {
       {notice && <div className="notice" role="status">{notice}</div>}
       {busy && <div className="progress" role="status">{busy}... <button onClick={() => disconnect()}>Cancel and disconnect</button></div>}
       {busy === 'Saving changes' && <p className="notice">Disconnecting does not undo a change already sent to Google. Reconnect and check change history if the result is uncertain.</p>}
-      {group ? <Dashboard key={group.id} group={group} busy={Boolean(busy)} onChoose={choose} onRefresh={refresh} onSave={manage} onProcess={id => manage(id, true)} /> : <div className="welcome-grid">
+      {creating && connection ? <CreateGroup config={config} connection={connection} initialSetup={groupSetup} onComplete={created} onBack={() => { setCreating(false); setGroupSetup(null); }} /> : group ? <Dashboard key={group.id} group={group} busy={Boolean(busy)} onChoose={choose} onRefresh={refresh} onSave={manage} onProcess={id => manage(id, true)} /> : <div className="welcome-grid">
         <section className="welcome"><p className="eyebrow">Church-owned. People-centered.</p><h1>A place to care<br />for every request.</h1>
           <p className="lede">Connect your church's prayer group without handing its records to a central database.</p>
           <div className="principles"><div><span>01</span><p><strong>Your church keeps the data.</strong> Prayer requests stay in your Google spreadsheet.</p></div>
@@ -181,11 +199,12 @@ function App() {
         <section className="connection-panel" aria-label="Connect a group">
           <span className="tag">Group management</span>
           <h2>{!config.ready ? 'Google setup required' : connection ? 'Choose your group' : 'Connect with Google'}</h2>
-          <p>{!config.ready ? 'The console is ready for its Google Cloud configuration. Sign-in will be available after the site operator completes the setup guide.' : connection ? 'Select the spreadsheet already configured for your church. Your Google account must have Editor access.' : 'Use the Google account that owns your church spreadsheet, or one the owner has added as an Editor.'}</p>
+          <p>{!config.ready ? 'The console is ready for its Google Cloud configuration. Sign-in will be available after the site operator completes the setup guide.' : connection ? 'Create a church-owned group, or choose an existing spreadsheet. Existing groups require Editor access.' : 'Use your church Google account, or one the church owner has added as an Editor.'}</p>
           {config.ready ? <button className="primary" disabled={!sdkReady || Boolean(busy)} onClick={connection ? choose : connect}>
             {!sdkReady ? 'Loading Google...' : connection ? 'Choose a spreadsheet' : 'Connect Google account'}</button>
             : <a className="button primary" href="./setup.html">Set up the Google connection</a>}
-          <p className="permission-note">Google permission covers files you select, not your entire Drive. Editing requires the upgraded church service. Older sheets remain read-only until upgraded.</p>
+          {connection && <button disabled={Boolean(busy)} onClick={() => { setGroupSetup(null); setCreating(true); }}>Create a new group</button>}
+          <p className="permission-note">Ordinary administration covers files you select, not your entire Drive. Creating a group asks separately for broader Google script-management permission. Older sheets remain read-only until upgraded.</p>
           <p className="permission-note">Confirm the spreadsheet with the picker's Select or Open button. Your sign-in and chosen group remain only until you leave or reload the page.</p>
           {config.ready && <p className="permission-note">Google picker stuck in Brave? <a href="./setup.html#brave-cookies" target="_blank" rel="noopener noreferrer">Browser cookie help</a> explains a site-only workaround without turning Shields off.</p>}
           <hr /><h3>Manage your church group</h3><p>Review submissions, create and edit prayers, publish or withdraw requests, and get your church website's submission form.</p>

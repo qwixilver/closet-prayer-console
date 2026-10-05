@@ -19,7 +19,15 @@ submission approval/decline, retryable change history, and a verified public for
 link/iframe. Each church must upgrade its bound script and enable management;
 older sheets remain read-only. Original group-only consent cannot be widened.
 
-**Not implemented:** group creation inside the console, roles beyond spreadsheet
+Guided creation now prepares a private sheet, its script, and linked member/public
+invitations in the console. The church owner enables Google script API access once,
+grants separate setup permissions, approves the generated church service, and
+finishes the connection check. Unfinished sheets resume through the existing picker.
+The flow is a pilot pending real Google consent/deployment testing, not a promise
+of consent-free setup. See [guided creation](public/setup.html#guided-creation) for
+the operator's one-time API/scope additions and live acceptance checklist.
+
+**Not implemented:** roles beyond spreadsheet
 permissions, automatic account reconnection, or other storage providers. Browser
 and API mocks do not prove live write/redirect/Workspace compatibility; complete
 the live checklist in the setup guide before using real prayer data.
@@ -94,6 +102,10 @@ file API responses remain intercepted. This does not validate a real selection.
   endpoint can receive authenticated Google requests.
 - Console reads Requests/Inbox plus ConsoleSettings/ConsoleCommands. File-level
   authorization is broader than those columns; Editors are trusted administrators.
+- Guided setup also reads/writes the private GroupSetup tab and uses separately
+  requested script.projects/script.deployments scopes. These are broader than
+  per-file permission; they are not requested for normal administration. The
+  generated church script separately needs spreadsheet/menu authorization.
 - The church script serializes console/menu/submission changes, checks row versions,
   and atomically writes console changes with their receipts. A public submission
   token can wake an existing private command, not supply a mutation or read prayers.

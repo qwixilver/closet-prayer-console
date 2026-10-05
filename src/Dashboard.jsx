@@ -2,6 +2,8 @@
 import React, { useDeferredValue, useEffect, useRef, useState } from 'react';
 import { rowRevision, verifyManagement } from './groupWriter.js';
 import { submissionLinks } from './consoleProtocol.js';
+import { memberLink } from './groupSetup.js';
+import { InvitationQr } from './InvitationQr.jsx';
 
 function localToday() {
   const now = new Date();
@@ -86,9 +88,10 @@ function SubmissionPanel({ group }) {
     {error && <p role="alert" className="error">{error}</p>}
     {!verified ? <button disabled={checking} onClick={verify}>{checking ? 'Checking service...' : 'Verify service and show embed'}</button> : <>
       <label>Public submission link<input readOnly value={links.link} onFocus={event => event.target.select()} /></label>
-      <label>Church website iframe<textarea readOnly rows={5} value={links.embed} onFocus={event => event.target.select()} /></label>
+      {group.setup?.phase === 'ready' && group.setup.groupId === group.management.groupId && <div><label>Private member invitation (members only)<textarea aria-label="Private member invitation (members only)" readOnly rows={3} value={memberLink(group.setup)} onFocus={event => event.target.select()} /></label><p>Anyone holding this invitation can read approved group prayers and submit for review. Do not embed or publish this private link.</p><InvitationQr value={memberLink(group.setup)} /></div>}
+      <label>Church website iframe<textarea aria-label="Church website iframe" readOnly rows={5} value={links.embed} onFocus={event => event.target.select()} /></label>
       <a className="button" href={links.link} target="_blank" rel="noopener noreferrer">Open submission form</a>
-      <p className="small muted">Only a public submission credential is included, never a member invitation or Google access token. Anyone with this link can submit, but cannot read prayers or approve requests. Submissions default to group-only and require consent. Test the iframe on your church's website before publishing it.</p>
+      <p className="small muted">The public link and iframe include only a submission credential, never a member invitation or Google access token. Anyone with the public link can submit, but cannot read prayers or approve requests. Submissions default to group-only and require consent. Test the iframe on your church's website before publishing it.</p>
     </>}
   </section>;
 }

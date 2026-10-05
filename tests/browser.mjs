@@ -6,6 +6,7 @@ import { dirname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileId, groupId, endpoint, responses, managedResponses } from './fixtures.mjs';
+import { setupFixture, setupSheetId, setupEmail } from './setupFixture.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require(process.env.CP_PLAYWRIGHT_PATH || 'playwright');
@@ -44,6 +45,7 @@ async function mockContext(options = {}) {
   const state = { apiCalls: [], viewer: false, denyRefresh: false, delayValues: false, pending: null, loseProcess: false, conflict: false, mismatch: false };
   const data = structuredClone(options.managed ? managedResponses() : responses());
   state.data = data;
+  if (options.setup) state.setup = setupFixture();
   await context.route('https://**/*', async route => {
     const url = new URL(route.request().url());
     if (url.hostname === 'docs.google.com' && url.pathname === '/picker') {
@@ -51,8 +53,9 @@ async function mockContext(options = {}) {
     }
     if (url.hostname === 'accounts.google.com' && url.pathname === '/gsi/client') {
       const script = `window.google = { accounts: { oauth2: { initTokenClient(config) {
-        return { requestAccessToken() { setTimeout(() => config.callback({ access_token: 'test-only-token',
-          scope: ${JSON.stringify(options.denyScope ? 'openid' : 'openid https://www.googleapis.com/auth/drive.file')}, expires_in: 3600 }), 0); } };
+        (window.testRequestedScopes ||= []).push(config.scope);
+        return { requestAccessToken() { setTimeout(() => config.callback({ access_token: '${options.setup ? 'test-setup-token' : 'test-only-token'}',
+          scope: ${options.setup ? 'config.scope' : JSON.stringify(options.denyScope ? 'openid' : 'openid https://www.googleapis.com/auth/drive.file')}, expires_in: 3600 }), 0); } };
       } } } };`;
       return route.fulfill({ contentType: 'application/javascript', body: script });
     }
@@ -79,7 +82,7 @@ async function mockContext(options = {}) {
                 const select = document.createElement('button');
                 select.textContent = 'Confirm test spreadsheet';
                 select.onclick = () => {
-                  if (!${Boolean(options.silentSelection)}) this.callback({ action: 'picked', docs: [{ id: '${fileId}' }] });
+                  if (!${Boolean(options.silentSelection)}) this.callback({ action: 'picked', docs: [{ id: '${options.setup ? setupSheetId : fileId}' }] });
                 };
                 const cancel = document.createElement('button');
                 cancel.textContent = 'Cancel test picker';
@@ -101,6 +104,21 @@ async function mockContext(options = {}) {
         config.callback();
       } };`;
       return route.fulfill({ contentType: 'application/javascript', body: script });
+    }
+    if (options.setup) {
+      const f = state.setup;
+      let body;
+      if (url.hostname === 'openidconnect.googleapis.com') body = { sub: 'owner', email: setupEmail, email_verified: true, name: 'Test Owner' };
+      else if (url.hostname === 'www.googleapis.com' && !url.searchParams.get('fields')?.includes('ownedByMe')) body = {
+        id: setupSheetId, name: 'Guided test church', mimeType: 'application/vnd.google-apps.spreadsheet', capabilities: { canEdit: true } };
+      else if (url.pathname.endsWith('/values:batchGet')) body = { valueRanges: url.searchParams.get('ranges') === 'GroupSetup!A1:B3' ? [{ values: f.values }] :
+        ['Requests', 'Inbox', 'ConsoleSettings', 'ConsoleCommands'].map(title => ({ values: title === 'ConsoleSettings' ? f.settings : f.sheetPayload.sheets.find(sheet => sheet.properties.title === title).data[0].rowData.map(row => row.values.map(cell => cell.userEnteredValue.stringValue)) })) };
+      else if (url.hostname === 'sheets.googleapis.com' && url.pathname === `/v4/spreadsheets/${setupSheetId}`) body = { sheets: f.sheetPayload.sheets.map(sheet => ({ properties: sheet.properties })) };
+      if (body) return route.fulfill({ contentType: 'application/json', body: JSON.stringify(body) });
+      const headers = route.request().headers();
+      const response = await f.fetchImpl(url.href, { method: route.request().method(), body: route.request().postData(),
+        headers: { ...(headers.authorization ? { Authorization: headers.authorization } : {}) }, credentials: 'omit', redirect: 'error' });
+      return route.fulfill({ status: response.status, contentType: 'application/json', body: await response.text() });
     }
     state.apiCalls.push({ url: url.href, method: route.request().method() });
     if (url.href === endpoint) {
@@ -433,6 +451,43 @@ try {
   assert.deepEqual(stalled.errors, []);
   await stalled.context.close();
   console.log('PASS: recovery works above a blocking modal with no callbacks, keeps diagnostics/login, ignores late events, and allows retry');
+
+  const creation = await mockContext({ setup: true });
+  const cp = creation.page;
+  await cp.setViewportSize({ width: 360, height: 800 });
+  await cp.getByRole('button', { name: 'Connect Google account' }).click();
+  await cp.getByRole('button', { name: 'Create a new group' }).click();
+  await cp.getByLabel('Church or group name', { exact: true }).fill('Guided test church');
+  assert.equal(await cp.getByRole('button', { name: 'Prepare my group' }).isEnabled(), false);
+  await cp.getByRole('checkbox', { name: /I have enabled/ }).check();
+  await noOverflow(cp);
+  await cp.screenshot({ path: resolve(output, 'guided-setup-mobile.png'), fullPage: true });
+  await cp.getByRole('button', { name: 'Prepare my group' }).click();
+  await cp.getByRole('link', { name: 'Open Google approval', exact: true }).waitFor();
+  await cp.getByRole('button', { name: 'Finish setup' }).click();
+  await cp.getByRole('status').filter({ hasText: 'Open Google approval below' }).waitFor();
+  assert.equal(JSON.parse(creation.state.setup.values[1][1]).phase, 'authorizing');
+  assert.ok(!creation.state.setup.calls.some(call => new URL(call.url).hostname === 'script.google.com'));
+  await cp.getByRole('button', { name: 'Sign out', exact: true }).click();
+  await connectAndChoose(cp);
+  await cp.getByRole('heading', { name: 'Set up Guided test church' }).waitFor();
+  creation.state.setup.authorize();
+  await cp.getByRole('checkbox', { name: /I have enabled/ }).check();
+  await cp.getByRole('button', { name: 'Finish setup' }).click();
+  await cp.getByRole('heading', { name: 'Guided test church', exact: true }).waitFor();
+  await cp.getByRole('button', { name: 'Verify service and show embed' }).click();
+  await cp.getByRole('button', { name: 'Show invitation QR' }).click();
+  await cp.getByRole('img', { name: 'Private member invitation QR' }).waitFor();
+  assert.match(await cp.getByLabel('Private member invitation (members only)', { exact: true }).inputValue(), /#group=CPG1\.m\./);
+  assert.match(await cp.getByLabel('Church website iframe', { exact: true }).inputValue(), /#group=CPG1\.s\./);
+  assert.equal(JSON.parse(creation.state.setup.values[1][1]).phase, 'ready');
+  assert.equal(creation.state.setup.deployments.length, 1);
+  await noOverflow(cp);
+  await cp.screenshot({ path: resolve(output, 'created-group-mobile.png'), fullPage: true });
+  assert.deepEqual(await cp.evaluate(() => [localStorage.length, sessionStorage.length]), [0, 0]);
+  assert.deepEqual(creation.errors, []);
+  await creation.context.close();
+  console.log('PASS: guided setup, separate consent, approval gate, resume after sign-out, activation checks, private invitation QR, public iframe, no persistent browser state, and mobile layout (mock Google)');
 
   if (process.env.CP_LIVE_GOOGLE_SDK === '1') {
     // Load the real public SDK but intercept authentication, Picker content and

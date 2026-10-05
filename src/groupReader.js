@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import { parseConsoleSettings, parseCommands } from './consoleProtocol.js';
+import { parseSetup, setupEndpoint } from './groupSetup.js';
 export const REQUEST_HEADERS = ['id', 'publication', 'visibility', 'consent', 'title', 'description', 'requestor', 'requestedAt', 'status'];
 export const INBOX_HEADERS = ['id', 'receivedAt', 'title', 'description', 'requestor', 'contact', 'allowedSharing', 'reviewStatus'];
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
@@ -101,6 +102,12 @@ export async function readGroup(fileId, session, options) {
   const metadataUrl = new URL(base);
   metadataUrl.searchParams.set('fields', 'sheets(properties(title,gridProperties(rowCount,columnCount)))');
   const metadata = await googleJson(metadataUrl.href, session, options);
+  let setup = null;
+  if (metadata.sheets?.some(item => item.properties?.title === 'GroupSetup')) {
+    const setupData = await googleJson(`${base}/values:batchGet?ranges=GroupSetup!A1:B3&valueRenderOption=UNFORMATTED_VALUE`, session, options);
+    setup = parseSetup(setupData.valueRanges?.[0]?.values, fileId);
+    if (setup.phase !== 'ready') return { id: fileId, setup };
+  }
   const ranges = ['Requests', 'Inbox'].map((title, i) => {
     const sheet = metadata.sheets?.find(item => item.properties?.title === title)?.properties;
     const width = i === 0 ? REQUEST_HEADERS.length : INBOX_HEADERS.length;
@@ -124,9 +131,12 @@ export async function readGroup(fileId, session, options) {
   valuesUrl.searchParams.set('dateTimeRenderOption', 'SERIAL_NUMBER');
   const data = await googleJson(valuesUrl.href, session, options);
   if (data.valueRanges?.length !== ranges.length) throw new Error('Google did not return all group tabs. Please try again.');
+  const management = hasConsole ? parseConsoleSettings(data.valueRanges[2].values) : null;
+  if (setup && (!management || setup.groupId !== management.groupId || setup.submissionToken !== management.token ||
+      setupEndpoint(setup) !== management.endpoint)) throw new Error('The setup and console settings do not match. Ask the owner to check the private setup record.');
   return { id: fileId, name: typeof file.name === 'string' ? file.name : 'Church spreadsheet',
     requests: parseRows(data.valueRanges[0].values, 'Requests'),
     inbox: parseRows(data.valueRanges[1].values, 'Inbox'), loadedAt: Date.now(),
-    management: hasConsole ? parseConsoleSettings(data.valueRanges[2].values) : null,
-    commands: hasConsole ? parseCommands(data.valueRanges[3].values) : [] };
+    management,
+    commands: hasConsole ? parseCommands(data.valueRanges[3].values) : [], setup };
 }
